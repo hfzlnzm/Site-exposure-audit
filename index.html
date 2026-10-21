@@ -1,53 +1,119 @@
 <!DOCTYPE html>
+<!--
+  ==============================================================
+   SITE EXPOSURE AUDIT
+  ==============================================================
+   Apa fungsi fail ini?
+     Tool untuk semak apa maklumat sensitif tapi terdedah kepada umum
+     (fail .env, backup, folder terbuka, panel admin, dll) pada domain
+     YANG ANDA MILIKI. Caranya: guna teknik "Google dorking" melalui
+     Serper API (hasil carian Google sebenar).
+  
+   Aliran kerja ringkas:
+     1. User masukkan domain + tick kotak kebenaran + isi API key
+     2. Tool jalankan 22 query dork (senarai DORKS dalam JavaScript)
+     3. Hasil ditapis supaya hanya domain sasaran sahaja yang dikira
+     4. Kalau ada Anthropic key: Claude tulis laporan. Kalau tiada:
+        hasil dipaparkan terus mengikut kategori
+     5. User boleh tanya soalan susulan (follow-up) dalam chat
+  
+   Susunan fail: (1) CSS untuk rupa, (2) HTML untuk struktur,
+                 (3) JavaScript untuk logik/fungsi.
+  
+   Tool ini PASIF: ia hanya tanya enjin carian, tidak pernah hantar
+   request terus ke website sasaran.
+  ==============================================================
+-->
 <html lang="en">
 <head>
 <meta charset="utf-8">
 <meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
 <title>Site Exposure Audit</title>
+<!--
+   ===== BAHAGIAN 1: CSS (rupa & susun atur) =====
+-->
 <style>
+/* Pembolehubah warna (tema cerah). Tukar warna di sini sahaja, semua tempat lain ikut. */
+/* bg=latar, surf=permukaan kad/input, ink=teks, mut=teks pudar, acc=warna utama (biru), */
+/* line=garisan, warn/warnbg=amaran */
 :root{--bg:#fff;--surf:#f0f4f9;--ink:#1f1f1f;--mut:#5f6368;--acc:#0b57d0;--line:#e1e5ea;--warn:#b3261e;--warnbg:#fce8e6}
+/* Mod gelap: kalau telefon/PC user guna dark mode, warna di atas diganti automatik */
 @media (prefers-color-scheme:dark){:root{--bg:#131314;--surf:#1e1f20;--ink:#e3e3e3;--mut:#9aa0a6;--acc:#a8c7fa;--line:#2d2f31;--warn:#f2b8b5;--warnbg:#3a2224}}
+/* Semua elemen kira padding & border dalam lebar/tinggi (lebih mudah susun atur) */
 *{box-sizing:border-box}
+/* Halaman penuh skrin, buang margin lalai */
 html,body{height:100%;margin:0}
+/* Gaya asas halaman: warna, font, dan susunan menegak (header atas, kandungan bawah) */
 body{background:var(--bg);color:var(--ink);font:16px/1.55 "Google Sans","Segoe UI",system-ui,sans-serif;display:flex;flex-direction:column}
+/* Bar atas (header). env(safe-area...) elak bertindih dengan notch telefon */
 header{padding:14px 20px;padding-top:calc(14px + env(safe-area-inset-top,0px));display:flex;align-items:center;gap:10px}
+/* Tajuk "Site Exposure Audit" di header */
 header h1{font-size:18px;font-weight:500;margin:0}
+/* Label domain di kanan header (tersembunyi dulu, dipaparkan selepas audit bermula) */
 .dom{margin-left:auto;display:none;gap:6px;align-items:center;font-size:13px;color:var(--mut)}
+/* Kotak kecil yang tunjuk nama domain */
 .dom code{background:var(--surf);padding:3px 8px;border-radius:8px;color:var(--ink)}
+/* Butang "change" untuk tukar domain */
 .dom button{border:0;background:none;color:var(--acc);cursor:pointer;font-size:13px;padding:2px 4px}
+/* Bekas utama kandungan (antara header dan kotak soalan) */
 #wrap{flex:1;display:flex;flex-direction:column;min-height:0}
+/* Skrin permulaan (borang domain) - diletak di tengah */
 #gateCenter{margin:auto;max-width:480px;padding:0 20px;text-align:center}
+/* Tajuk besar dan teks penerangan di skrin permulaan */
 #gateCenter h2{font-size:28px;margin:0 0 8px}
 #gateCenter p{color:var(--mut);margin:0 0 22px;font-size:14px}
+/* Kotak input domain berbentuk bulat (gaya ChatGPT/Gemini) */
 .domBox{display:flex;align-items:center;gap:8px;background:var(--surf);border-radius:16px;border:1px solid var(--line);padding:6px 6px 6px 18px}
 .domBox:focus-within{border-color:var(--acc)}
+/* Medan taip domain (tanpa border sebab border ada pada .domBox) */
 #domInput{flex:1;width:100%;padding:12px 0;border:0;background:transparent;color:var(--ink);font-size:17px;outline:none}
+/* Butang bulat anak panah "↑" untuk mula audit. Hover = sedikit lebih cerah, disabled = pudar */
 button.go{border:0;background:var(--acc);color:#fff;width:40px;height:40px;border-radius:50%;font-size:18px;cursor:pointer;flex:none;display:flex;align-items:center;justify-content:center;box-shadow:0 1px 3px rgba(0,0,0,.25);transition:filter .15s}
 button.go:hover:not(:disabled){filter:brightness(1.08)}
 button.go:disabled{background:var(--bg);color:var(--mut);box-shadow:none;cursor:default;opacity:1}
+/* Baris kotak tick kebenaran ("I own this domain...") */
 .ack{display:flex;gap:8px;align-items:flex-start;text-align:left;margin:16px 2px;font-size:13px;color:var(--mut)}
+/* Dua medan API key (Serper & Anthropic) disusun menegak */
 .keys{margin-top:10px;display:flex;flex-direction:column;gap:8px}.keys input{width:100%;padding:11px 14px;border:1px solid var(--line);border-radius:12px;background:var(--surf);color:var(--ink);font-size:14px;outline:none}.keys input:focus{border-color:var(--acc)}
+/* Gaya senarai "dork queries run" yang boleh dibuka/tutup */
 details{font-size:13px;color:var(--mut)}details summary{cursor:pointer}details li{margin:2px 0;overflow-wrap:anywhere}
+/* Teks hint/ralat kecil di bawah borang (cth: "Enter a valid domain") */
 .hint{color:var(--mut);font-size:12px;margin-top:10px;min-height:16px}
+/* Kawasan sembang (scroll). Tersembunyi dulu, dipaparkan bila audit bermula */
 #chat{flex:1;overflow-y:auto;padding:8px 16px 16px;max-width:820px;width:100%;margin:0 auto;display:none}
+/* Setiap mesej dalam chat. .u = mesej user (kanan), .a = jawapan assistant */
 .msg{margin:14px 0;display:flex}
 .msg.u{justify-content:flex-end}
+/* "Bubble" / kotak teks mesej */
 .b{max-width:88%;padding:10px 16px;border-radius:20px;overflow-wrap:anywhere}
+/* Bubble user: latar kelabu, bucu kanan bawah kurang bulat, font monospace */
 .u .b{background:var(--surf);border-bottom-right-radius:6px;font:14px ui-monospace,Menlo,monospace}
 .a .b{max-width:100%;padding:4px 0}
+/* Gaya kandungan jawapan: perenggan, senarai, kod, pautan */
 .b p{margin:0 0 10px}.b ul,.b ol{margin:0 0 10px;padding-left:22px}
+/* Teks kod (inline) dengan latar kelabu */
 .b code{background:var(--surf);padding:1px 6px;border-radius:6px;font-size:.9em}
+/* Warna pautan dalam jawapan */
 .b a{color:var(--acc)}
+/* Baris pautan sumber (kotak kecil) di bawah jawapan AI */
 .src{display:flex;flex-wrap:wrap;gap:6px;margin-top:8px}
+/* Satu pautan sumber: dipotong dengan "..." kalau terlalu panjang */
 .src a{background:var(--surf);border-radius:10px;padding:4px 10px;font-size:12px;color:var(--mut);text-decoration:none;max-width:220px;white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
+/* Teks status berkelip (cth: "Running dork queries 5/22...") */
 .stat{color:var(--mut);font-size:14px;animation:p 1.2s infinite}
+/* Animasi kelip: opacity turun ke 40% di tengah kitaran */
 @keyframes p{50%{opacity:.4}}
+/* Borang soalan susulan di bawah skrin (tersembunyi dulu) */
 form{max-width:820px;width:100%;margin:0 auto;padding:8px 16px calc(14px + env(safe-area-inset-bottom,0px));display:none}
+/* Kotak bulat yang mengandungi textarea + butang hantar */
 .box{display:flex;align-items:flex-end;gap:8px;background:var(--surf);border-radius:28px;padding:8px 8px 8px 20px}
+/* Medan taip soalan; auto membesar sehingga tinggi maksimum 160px */
 textarea{flex:1;border:0;background:transparent;color:var(--ink);font:13px ui-monospace,Menlo,monospace;resize:none;outline:none;max-height:160px;padding:8px 0}
+/* Butang hantar bulat (sama gaya dengan button.go) */
 button.s{border:0;background:var(--acc);color:#fff;width:40px;height:40px;border-radius:50%;font-size:18px;cursor:pointer;flex:none;display:flex;align-items:center;justify-content:center;box-shadow:0 1px 3px rgba(0,0,0,.25);transition:filter .15s}
 button.s:hover:not(:disabled){filter:brightness(1.08)}
 button.s:disabled{background:var(--surf);color:var(--mut);box-shadow:none;cursor:default;opacity:1}
+/* Kad "Usage limit reached": tajuk, penerangan, kiraan detik (.cd), bar progres (.bar), butang Retry */
 .lim{background:var(--surf);border:1px solid var(--line);border-radius:18px;padding:16px 18px;max-width:420px}
 .lim h3{margin:0 0 4px;font-size:16px;font-weight:500}
 .lim .why{margin:0 0 12px;font-size:14px;color:var(--mut)}
@@ -58,31 +124,52 @@ button.s:disabled{background:var(--surf);color:var(--mut);box-shadow:none;cursor
 .lim button{border:0;background:var(--acc);color:#fff;border-radius:20px;padding:9px 18px;font-size:14px;cursor:pointer}
 .lim button:disabled{background:var(--bg);color:var(--mut);cursor:default}
 .lim .ok{color:var(--acc)}
+/* Pautan "Check your usage" / baki request */
 .use{margin-top:4px}.use a{color:var(--acc)}
+/* Nota kecil di bawah kotak soalan */
 .note{text-align:center;color:var(--mut);font-size:11px;margin-top:6px}
+/* Butang menu 3 garis (buka sidebar) */
 #hamburger{border:0;background:none;color:var(--ink);cursor:pointer;padding:6px;margin:-6px;border-radius:8px;flex:none}
 #hamburger:hover{background:var(--surf)}
 #hamburger svg{display:block}
+/* Lapisan gelap di belakang sidebar. Bila ada class "open" ia kelihatan & boleh diklik */
 #overlay{position:fixed;inset:0;background:rgba(0,0,0,.35);z-index:19;opacity:0;pointer-events:none;transition:opacity .2s}
 #overlay.open{opacity:1;pointer-events:auto}
+/* Sidebar kiri (senarai audit lama). Asalnya tersorok di luar skrin (translateX -100%), */
+/* bila ada class "open" ia meluncur masuk */
 #sidebar{position:fixed;top:0;left:0;bottom:0;width:280px;max-width:84vw;background:var(--bg);border-right:1px solid var(--line);z-index:20;
   transform:translateX(-100%);transition:transform .22s ease;display:flex;flex-direction:column;padding-top:env(safe-area-inset-top,0px)}
 #sidebar.open{transform:translateX(0)}
+/* Bahagian atas sidebar & butang "+ New audit" */
 .sbHead{padding:16px 14px 10px}
+/* Butang "+ New audit" */
 .sbNew{display:flex;align-items:center;gap:8px;width:100%;border:1px solid var(--line);background:var(--surf);color:var(--ink);border-radius:20px;padding:10px 14px;font-size:14px;cursor:pointer}
 .sbNew:hover{filter:brightness(1.05)}
+/* Label kecil "RECENTS" */
 .sbLabel{color:var(--mut);font-size:12px;font-weight:600;letter-spacing:.02em;text-transform:uppercase;margin:14px 14px 4px}
+/* Kawasan senarai audit terkini (boleh scroll) */
 #recents{flex:1;overflow-y:auto;padding:0 8px 12px}
+/* Satu item audit dalam senarai; .active = audit yang sedang dibuka */
 .rItem{display:flex;flex-direction:column;gap:1px;padding:9px 10px;border-radius:12px;cursor:pointer;margin:1px 0}
 .rItem:hover{background:var(--surf)}
 .rItem.active{background:var(--surf)}
 .rItem .rDom{font-size:14px;overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
 .rItem .rMeta{font-size:11px;color:var(--mut)}
+/* Teks "No audits yet" bila senarai kosong */
 .rEmpty{color:var(--mut);font-size:13px;padding:10px 14px}
 </style>
+<!--
+   ===== BAHAGIAN 2: HTML (struktur halaman) =====
+-->
 </head>
 <body>
+<!--
+   Lapisan gelap belakang sidebar (klik untuk tutup sidebar)
+-->
 <div id="overlay"></div>
+<!--
+   SIDEBAR: butang audit baru + senarai audit terdahulu (diisi oleh JavaScript)
+-->
 <div id="sidebar">
   <div class="sbHead">
     <button class="sbNew" id="sbNewBtn">+ New audit</button>
@@ -90,44 +177,101 @@ button.s:disabled{background:var(--surf);color:var(--mut);box-shadow:none;cursor
   <div class="sbLabel">Recents</div>
   <div id="recents"></div>
 </div>
+<!--
+   HEADER: butang menu, tajuk, dan label domain semasa
+-->
 <header>
+  <!--
+     Butang menu untuk buka sidebar
+  -->
   <button id="hamburger" aria-label="Recents"><svg width="22" height="22" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round"><line x1="3" y1="6" x2="21" y2="6"/><line x1="3" y1="12" x2="21" y2="12"/><line x1="3" y1="18" x2="21" y2="18"/></svg></button>
   <h1>🔎 Site Exposure Audit</h1>
+  <!--
+     Label domain + butang "change" (hanya nampak bila audit sedang berjalan)
+  -->
   <div class="dom" id="domBar">scoped to <code id="domLabel"></code><button id="changeDom">change</button></div>
 </header>
+<!--
+   KANDUNGAN UTAMA: skrin permulaan ATAU chat (salah satu sahaja dipaparkan)
+-->
 <div id="wrap">
+  <!--
+     SKRIN PERMULAAN: borang masukkan domain, kebenaran dan API key
+  -->
   <div id="gateCenter">
     <h2>Site Exposure Audit</h2>
     <p>Type a domain, press Enter. Runs a full Google-dorking exposure scan (open files, directories, backups, .git, admin panels) and returns a conversational report of what's actually publicly indexed. Use only on a domain you own or are authorized to test.</p>
+    <!--
+       Input domain + butang mula (butang disabled sehingga semua syarat dipenuhi)
+    -->
     <div class="domBox">
       <input id="domInput" placeholder="yourdomain.com" autofocus>
       <button class="go" id="domGo" type="button" aria-label="Start audit" disabled>↑</button>
     </div>
+    <!--
+       Kotak tick: user mesti sahkan dia pemilik / ada kebenaran bertulis
+    -->
     <label class="ack"><input type="checkbox" id="ack"> I own this domain, or have written authorization to test it.</label>
+    <!--
+       API key: Serper (wajib), Anthropic (pilihan, untuk laporan AI). Disimpan dalam browser sahaja
+    -->
     <div class="keys"><input id="serperKey" type="password" placeholder="Serper API key (required)" autocomplete="off"><input id="anthKey" type="password" placeholder="Anthropic API key (optional, for the AI report)" autocomplete="off"></div>
+    <!--
+       Tempat mesej hint/ralat untuk user
+    -->
     <div class="hint" id="hint">Keys are stored only in this browser.</div>
   </div>
+  <!--
+     Kawasan chat: hasil audit & jawapan dipaparkan di sini (diisi oleh JavaScript)
+  -->
   <div id="chat"></div>
 </div>
+<!--
+   BORANG SOALAN SUSULAN: user boleh tanya lagi tentang domain yang sama
+-->
 <form id="f">
   <div class="box">
+    <!--
+       Kotak taip soalan. Enter = hantar, Shift+Enter = baris baru
+    -->
     <textarea id="q" rows="1" placeholder="Ask a follow-up about this domain…"></textarea>
     <button class="s" id="go" type="submit" aria-label="Send">↑</button>
   </div>
   <div class="note">Scoped to the declared, authorized domain only. Results reflect what's publicly indexed — verify and remediate directly.</div>
+  <!--
+     Tempat paparan baki request API (dikemas kini oleh updateUsage)
+  -->
   <div class="note use" id="usage"><a href="https://claude.ai/settings/usage" target="_blank" rel="noopener noreferrer">Check your usage</a></div>
 </form>
 
+<!--
+   ===== BAHAGIAN 3: JAVASCRIPT (logik / fungsi) =====
+-->
 <script>
+// ===== STATE ASAS & BORANG DOMAIN =====
+// DOMAIN = domain yang sedang diaudit (kosong = belum mula)
 let DOMAIN = '';
+// Ambil elemen-elemen borang dari HTML supaya boleh digunakan dalam kod
 const domInput = document.getElementById('domInput'), ack = document.getElementById('ack'), hint = document.getElementById('hint'), domGo = document.getElementById('domGo');
+// clean(): bersihkan input user.
+// Contoh: "  HTTPS://Example.com/page " menjadi "example.com"
+// (trim, huruf kecil, buang http(s):// dan apa-apa selepas "/")
 function clean(d){ return d.trim().toLowerCase().replace(/^https?:\/\//,'').replace(/\/.*$/,''); }
+// validDomain(): semak format domain betul (cth: example.com). Pulangkan true/false
 function validDomain(){ return /^[a-z0-9.-]+\.[a-z]{2,}$/.test(clean(domInput.value)); }
+// ===== SIMPAN API KEY =====
+// Key disimpan dalam localStorage browser user sahaja (tidak dihantar ke mana-mana selain Serper/Anthropic)
+// getKey(id): ambil nilai input mengikut id, buang ruang kosong
 const KEYS_STORE='dorkaudit:keys', getKey = id => document.getElementById(id).value.trim();
+// Bila halaman dibuka, isi semula key yang pernah disimpan (kalau ada)
 try { const k = JSON.parse(localStorage.getItem(KEYS_STORE)||'{}'); document.getElementById('serperKey').value = k.s||''; document.getElementById('anthKey').value = k.a||''; } catch(_){}
+// saveKeys(): simpan kedua-dua key ke localStorage
 function saveKeys(){ try { localStorage.setItem(KEYS_STORE, JSON.stringify({s:getKey('serperKey'), a:getKey('anthKey')})); } catch(_){} }
+// Setiap kali user menaip dalam kotak key: simpan & kemas kini status butang
 ['serperKey','anthKey'].forEach(id => document.getElementById(id).addEventListener('input', () => { saveKeys(); syncGo(); }));
+// syncGo(): butang mula hanya aktif bila: domain sah + kotak kebenaran ditick + Serper key diisi
 function syncGo(){ domGo.disabled = !(validDomain() && ack.checked && getKey('serperKey')); }
+// tryStart(): cuba mulakan audit. Kalau ada syarat tidak lengkap, tunjuk hint; kalau lengkap panggil startAudit()
 function tryStart(){
   const d = clean(domInput.value);
   if (!validDomain()) { hint.textContent = 'Enter a valid domain, e.g. yourdomain.com'; return; }
@@ -135,24 +279,34 @@ function tryStart(){
   if (!getKey('serperKey')) { hint.textContent = 'Enter your Serper API key.'; return; }
   startAudit(d);
 }
+// ===== EVENT LISTENER BORANG =====
+// Bila user taip domain: padam hint lama dan semak semula butang
 domInput.addEventListener('input', () => { hint.textContent = ''; syncGo(); });
+// Tekan Enter dalam kotak domain = cuba mula audit
 domInput.addEventListener('keydown', e => { if (e.key === 'Enter') { e.preventDefault(); tryStart(); } });
+// Bila tick/untick kotak kebenaran: semak semula butang
 ack.addEventListener('change', () => { hint.textContent = ''; syncGo(); });
+// Klik butang anak panah = cuba mula audit
 domGo.addEventListener('click', tryStart);
 
+// Butang "change" / "+ New audit": reset semua dan kembali ke skrin permulaan.
+// Tidak boleh ditekan semasa audit sedang berjalan (busy).
 document.getElementById('changeDom').addEventListener('click', () => {
   if (busy) return;
+  // Kosongkan domain, sejarah perbualan AI (hist) dan log paparan (displayLog)
   DOMAIN = ''; hist = []; displayLog = [];
   document.getElementById('chat').style.display = 'none';
   document.getElementById('chat').innerHTML = '';
   document.getElementById('f').style.display = 'none';
   document.getElementById('domBar').style.display = 'none';
+  // Tunjuk skrin permulaan semula, sembunyikan chat & borang soalan
   document.getElementById('gateCenter').style.display = 'block';
   domInput.value = ''; ack.checked = false; hint.textContent = ''; syncGo();
   domInput.focus();
   renderRecents();
 });
 
+// startAudit(): mula audit. Sembunyikan skrin permulaan, tunjuk chat + borang soalan, kemudian jalankan runFullAudit()
 function startAudit(d){
   DOMAIN = d;
   document.getElementById('domLabel').textContent = DOMAIN;
@@ -163,6 +317,12 @@ function startAudit(d){
   runFullAudit();
 }
 
+// ===== ARAHAN KEPADA AI (SYSTEM PROMPT) =====
+// Teks ini dihantar kepada Claude supaya ia tahu peranannya & peraturan:
+//   - hanya audit domain sasaran, tulis laporan daripada hasil sebenar sahaja
+//   - jangan reka URL, jangan dedahkan kandungan fail/password yang terdedah
+//   - gaya laporan ringkas & fakta (macam laporan pentest)
+// ${DOMAIN} akan digantikan dengan domain semasa. Ia fungsi supaya nilai sentiasa terkini.
 const SYSTEM = () => `You are a site-exposure audit assistant running authorized Google-dorking checks for a cybersecurity student's final-year project, scoped ONLY to the domain ${DOMAIN}, which the user has confirmed they own or are authorized to test.
 Rules:
 - If the user message contains DORK SCAN RESULTS, write the report ONLY from those results (they come from a fixed list of dork queries already run). Do not search. A category with no hits means nothing was indexed for it.
@@ -176,9 +336,19 @@ Rules:
 - Never reproduce the contents of any exposed file, credential, key, password, or personal data — only acknowledge something sensitive appears exposed and recommend rotating/removing it immediately. Linking to the exposed page itself is fine; quoting what's inside it is not.
 - Tone: concise, factual pentest-report style. No alarmism, no speculation beyond what search actually returned.`;
 
+// ===== PAPARAN CHAT =====
+// chat = kawasan mesej, qEl = kotak soalan, goSend = butang hantar
+// hist = sejarah mesej untuk dihantar kepada AI
+// displayLog = mesej yang dipaparkan (untuk disimpan & dibuka semula nanti)
+// busy = true bila sedang memproses (elak klik berganda)
 const chat = document.getElementById('chat'), qEl = document.getElementById('q'), goSend = document.getElementById('go');
 let hist = [], displayLog = [], busy = false;
+// esc(): tukar < > & kepada kod selamat supaya teks luar tidak boleh jadi HTML/skrip berbahaya (cegah XSS)
 const esc = s => s.replace(/&/g,'&amp;').replace(/</g,'&lt;').replace(/>/g,'&gt;');
+// md(): tukar teks markdown ringkas daripada AI kepada HTML:
+//   `kod` jadi <code>, **tebal** jadi <strong>, [teks](url) jadi pautan,
+//   baris "- item" jadi senarai, "1. item" jadi senarai bernombor, "# tajuk" jadi teks tebal.
+// Teks di-esc() dahulu supaya selamat.
 function md(t){
   let h = esc(t);
   h = h.replace(/`([^`]+)`/g,'<code>$1</code>').replace(/\*\*([^*]+)\*\*/g,'<strong>$1</strong>')
@@ -191,14 +361,19 @@ function md(t){
     return '<p>' + lines.join('<br>') + '</p>';
   }).join('');
 }
+// add(): tambah satu bubble mesej ke chat. role: "u" = user, "a" = assistant. Pulangkan elemen bubble supaya boleh dikemas kini
 function add(role, html){
   const m = document.createElement('div'); m.className = 'msg ' + role;
   const b = document.createElement('div'); b.className = 'b'; b.innerHTML = html;
   m.appendChild(b); chat.appendChild(m); chat.scrollTop = chat.scrollHeight; return b;
 }
+// logMsg(): sama seperti add() tetapi juga simpan dalam displayLog supaya boleh disimpan sebagai sesi
 function logMsg(role, html){ const b = add(role, html); displayLog.push({role, html}); return b; }
 
+// ===== SESI / SEJARAH AUDIT (SIDEBAR RECENTS) =====
+// Setiap audit disimpan dalam localStorage dengan kunci "dorkaudit:session:<domain>"
 const STORE_PREFIX = 'dorkaudit:session:';
+// allSessions(): baca semua sesi yang tersimpan, susun daripada yang terbaru
 function allSessions(){
   const out = [];
   try {
@@ -211,11 +386,13 @@ function allSessions(){
   } catch(_){}
   return out.sort((a,b) => b.updated - a.updated);
 }
+// saveSession(): simpan sesi domain semasa (sejarah AI + log paparan + masa kemas kini), kemudian segarkan senarai sidebar
 function saveSession(){
   if (!DOMAIN) return;
   try { localStorage.setItem(STORE_PREFIX + DOMAIN, JSON.stringify({ domain: DOMAIN, hist, displayLog, updated: Date.now() })); } catch(_){}
   renderRecents();
 }
+// agoText(): tukar masa kepada teks mesra, cth "just now", "5m ago", "2h ago", "3d ago"
 function agoText(ts){
   const s = Math.max(1, Math.round((Date.now() - ts) / 1000));
   if (s < 60) return 'just now';
@@ -224,8 +401,10 @@ function agoText(ts){
   const d = Math.round(h / 24); if (d < 7) return d + 'd ago';
   return new Date(ts).toLocaleDateString();
 }
+// openSession(): buka semula audit lama daripada sidebar (pulihkan domain, sejarah & mesej)
 function openSession(d){
   if (busy) return;
+  // Ambil data sesi yang tersimpan; kalau tiada atau rosak, berhenti
   const raw = localStorage.getItem(STORE_PREFIX + d);
   if (!raw) return;
   let s; try { s = JSON.parse(raw); } catch(_) { return; }
@@ -241,6 +420,7 @@ function openSession(d){
   renderRecents();
   chat.scrollTop = chat.scrollHeight;
 }
+// renderRecents(): lukis senarai audit di sidebar. Klik satu item = buka audit itu
 function renderRecents(){
   const wrap = document.getElementById('recents');
   const sessions = allSessions();
@@ -251,21 +431,31 @@ function renderRecents(){
   }).join('');
   wrap.querySelectorAll('.rItem').forEach(el => el.addEventListener('click', () => openSession(el.dataset.domain)));
 }
+// openSidebar() / closeSidebar(): buka & tutup sidebar (tambah/buang class "open")
 function openSidebar(){ document.getElementById('sidebar').classList.add('open'); document.getElementById('overlay').classList.add('open'); renderRecents(); }
+// (lihat di atas)
 function closeSidebar(){ document.getElementById('sidebar').classList.remove('open'); document.getElementById('overlay').classList.remove('open'); }
+// Butang menu: kalau sidebar terbuka tutup, kalau tertutup buka
 document.getElementById('hamburger').addEventListener('click', () => {
   const sb = document.getElementById('sidebar');
   sb.classList.contains('open') ? closeSidebar() : openSidebar();
 });
+// Klik lapisan gelap = tutup sidebar
 document.getElementById('overlay').addEventListener('click', closeSidebar);
+// Butang "+ New audit": tutup sidebar dan reset ke skrin permulaan
 document.getElementById('sbNewBtn').addEventListener('click', () => {
   closeSidebar();
   document.getElementById('changeDom').click();
 });
+// Lukis senarai sidebar sekali bila halaman mula dibuka
 renderRecents();
 
+// ===== HAD PENGGUNAAN (RATE LIMIT) =====
+// limitUntil = masa (ms) bila limit tamat; lastReq = request terakhir (untuk butang Retry)
 let limitUntil = 0, lastReq = null;
+// Simpan teks placeholder asal kotak soalan supaya boleh dipulihkan selepas limit tamat
 const DEFAULT_PH = qEl.placeholder;
+// fmtLeft(): tukar milisaat kepada teks baki masa, cth "45 sec", "3 min 20 sec", "1 hr 5 min"
 function fmtLeft(ms){
   const s = Math.max(0, Math.ceil(ms/1000));
   if (s < 60) return s + ' sec';
@@ -274,12 +464,16 @@ function fmtLeft(ms){
   const h = Math.floor(m/60);
   return h + ' hr ' + (m%60) + ' min';
 }
+// fmtClock(): tukar cap masa kepada jam mesra, cth "today at 3:30 PM"
 function fmtClock(ts){
   const d = new Date(ts), now = new Date();
   const t = d.toLocaleTimeString([], {hour:'numeric', minute:'2-digit'});
   if (d.toDateString() === now.toDateString()) return 'today at ' + t;
   return d.toLocaleDateString([], {weekday:'short'}) + ' at ' + t;
 }
+// parseWaitSecs(): cari berapa saat perlu tunggu daripada respons ralat.
+// Cuba 3 cara: (1) header "retry-after", (2) tarikh ISO dalam mesej, (3) teks seperti "in 5 minutes".
+// Pulangkan null kalau tak jumpa.
 function parseWaitSecs(r, msg){
   const ra = r && r.headers && r.headers.get && r.headers.get('retry-after');
   if (ra) {
@@ -295,16 +489,20 @@ function parseWaitSecs(r, msg){
   }
   return null;
 }
+// isLimitErr(): semak adakah ralat ini sebab had penggunaan (status 429 / mesej mengandungi "rate limit", "quota" dll)
 function isLimitErr(status, type, msg){
   return status === 429 || type === 'rate_limit_error' || /usage limit|rate limit|quota|limit (has been )?reached|exceeded|too many requests/i.test(msg||'');
 }
+// setLocked(): kunci butang hantar & tukar placeholder semasa limit aktif; buka semula bila masa tamat
 function setLocked(until){
   limitUntil = until || 0;
   const locked = limitUntil > Date.now();
   goSend.disabled = busy || locked;
   qEl.placeholder = locked ? 'Usage limit reached — available again ' + fmtClock(limitUntil) : DEFAULT_PH;
 }
+// showLimit(): paparkan kad "Usage limit reached" dengan kiraan detik, bar progres dan butang Retry
 function showLimit(out, secs, req){
+  // known = adakah kita tahu bila limit tamat? Kalau ya, papar kiraan detik
   const known = secs != null && isFinite(secs);
   const total = known ? Math.max(1, secs) * 1000 : 0;
   const until = known ? Date.now() + total : 0;
@@ -319,14 +517,17 @@ function showLimit(out, secs, req){
   out.appendChild(c);
   const btn = c.querySelector('button'), cd = c.querySelector('.cd'), bar = c.querySelector('.bar i');
   btn.disabled = known;
+  // Klik Retry: buang kad ini, buka kunci, dan hantar semula request terakhir
   btn.onclick = () => {
     if (busy) return;
     out.closest('.msg').remove();
     setLocked(0);
     callApi(req.text, req.status);
   };
+  // Kalau masa tamat diketahui: kunci input dan kemas kini kiraan detik + bar setiap 1 saat
   if (known) {
     setLocked(until);
+    // tick(): dipanggil setiap saat. Bila masa habis: papar "Ready", aktifkan butang Retry
     const tick = () => {
       if (!c.isConnected) { clearInterval(iv); return; }
       const left = until - Date.now();
@@ -342,7 +543,10 @@ function showLimit(out, secs, req){
     const iv = setInterval(tick, 1000); tick();
   }
 }
+// ===== BAKI REQUEST & HEADER API =====
+// Pautan "Check your usage" (dipaparkan di bawah kotak soalan)
 const USAGE_LINK = '<a href="https://claude.ai/settings/usage" target="_blank" rel="noopener noreferrer">Check your usage</a>';
+// updateUsage(): baca header respons Anthropic dan papar baki request, cth "Requests left: 45 of 50 · resets today at 5:00 PM"
 function updateUsage(r){
   try {
     const g = n => r.headers.get(n);
@@ -353,45 +557,72 @@ function updateUsage(r){
       (isNaN(t) ? '' : ' \u00b7 resets ' + esc(fmtClock(t))) + ' \u00b7 ' + USAGE_LINK;
   } catch (_) {}
 }
+// apiHeaders(): bina header untuk panggilan ke API Anthropic (key, versi, dan kebenaran akses terus dari browser)
 function apiHeaders(){
   const h = {'Content-Type':'application/json'}, k = getKey('anthKey');
   if (k) { h['x-api-key']=k; h['anthropic-version']='2023-06-01'; h['anthropic-dangerous-direct-browser-access']='true'; }
   return h;
 }
+// ===== SENARAI DORK QUERY (22 KESELURUHAN) =====
+// Format setiap baris: [ "Nama kategori", "query Google" ]
+// {d} akan digantikan dengan domain sasaran. Semua query dihadkan dengan site:domain.
+// Nak tambah dork baru? Tambah satu baris di sini.
+// Operator: filetype: = jenis fail, inurl: = ada dalam URL, intext: = ada dalam kandungan, intitle: = ada dalam tajuk
 const DORKS = [
+ // KATEGORI "Exposed files": fail .env, database (.sql), log/backup, fail config dengan password/api_key, kunci peribadi (.pem/.key), fail teks ada password
  ['Exposed files','site:{d} filetype:env'],
  ['Exposed files','site:{d} (filetype:sql OR filetype:dbf OR filetype:mdb)'],
  ['Exposed files','site:{d} (filetype:log OR filetype:bak OR filetype:old OR filetype:swp)'],
  ['Exposed files','site:{d} (filetype:xml OR filetype:json OR filetype:yml OR filetype:conf OR filetype:cfg OR filetype:ini) (intext:password OR intext:api_key OR intext:secret)'],
  ['Exposed files','site:{d} (filetype:pem OR filetype:key OR filetype:ppk OR filetype:p12 OR filetype:kdbx)'],
  ['Exposed files','site:{d} filetype:txt (intext:password OR intext:username)'],
+ // KATEGORI "Sensitive documents": PDF/Word/Excel/CSV yang bertanda sulit atau mengandungi password
  ['Sensitive documents','site:{d} (filetype:pdf OR filetype:doc OR filetype:docx OR filetype:xls OR filetype:xlsx OR filetype:csv) (intext:confidential OR intext:"internal use only" OR intext:password)'],
+ // KATEGORI "Open directories": senarai folder terbuka ("index of /"), terutama folder backup/config/uploads
  ['Open directories','site:{d} intitle:"index of /"'],
  ['Open directories','site:{d} intitle:"index of" (backup OR db OR config OR uploads OR private)'],
+ // KATEGORI "Backup archives": fail arkib (zip, tar, gz, 7z, rar) dan URL berkaitan backup/dump
  ['Backup archives','site:{d} (filetype:zip OR filetype:gz OR filetype:tar OR filetype:7z OR filetype:rar)'],
  ['Backup archives','site:{d} inurl:(backup OR dump OR db_backup OR bak OR old)'],
+ // KATEGORI "Version control": folder .git / .svn / .hg yang terdedah (boleh dedah kod sumber)
  ['Version control','site:{d} (inurl:.git OR inurl:.svn OR inurl:.hg)'],
  ['Version control','site:{d} intitle:"index of" (".git" OR ".svn")'],
+ // KATEGORI "Admin / login panels": halaman admin/login, phpMyAdmin, Adminer, cPanel, Webmin
  ['Admin / login panels','site:{d} (inurl:admin OR inurl:login OR inurl:wp-admin OR inurl:dashboard)'],
  ['Admin / login panels','site:{d} inurl:(phpmyadmin OR adminer OR cpanel OR webmin)'],
+ // KATEGORI "Misconfig files": phpinfo, fail config PHP, halaman status/info Apache
  ['Misconfig files','site:{d} (intitle:phpinfo OR inurl:phpinfo.php)'],
  ['Misconfig files','site:{d} inurl:config filetype:php'],
  ['Misconfig files','site:{d} (intitle:"Apache Status" OR inurl:server-status OR inurl:server-info)'],
+ // KATEGORI "Error messages & debug": mesej ralat SQL, ralat fatal, stack trace (boleh dedah struktur dalaman)
  ['Error messages & debug','site:{d} (intext:"sql syntax near" OR intext:"Warning: mysql_" OR intext:"Fatal error" OR intext:"Stack trace")'],
+ // KATEGORI "API & dev environments": dokumentasi API (Swagger/GraphQL), laman staging/dev/test
  ['API & dev environments','site:{d} inurl:(swagger OR api-docs OR graphql OR openapi)'],
  ['API & dev environments','site:{d} inurl:(staging OR dev OR test OR debug OR beta)'],
+ // KATEGORI "Subdomains": subdomain yang diindeks (selain www)
  ['Subdomains','site:*.{d} -site:www.{d}']
 ];
+// ===== FUNGSI UTAMA: AUDIT PENUH =====
+// runFullAudit(): jalankan semua 22 dork melalui Serper, tapis hasil, kemudian:
+//   - ada Anthropic key = minta Claude tulis laporan (callApi)
+//   - tiada key         = papar hasil ikut kategori terus
 async function runFullAudit(){
+  // Papar mesej user: "Run full exposure audit on <domain>"
   logMsg('u', 'Run full exposure audit on <strong>' + esc(DOMAIN) + '</strong>');
+  // Tandakan sibuk (busy) dan lumpuhkan butang hantar semasa audit berjalan
   const dom = DOMAIN, key = getKey('serperKey');
   busy = true; goSend.disabled = true;
   const out = add('a', '');
+  // n = bilangan query yang siap. status() kemas kini teks "Running dork queries n/22..."
   let n = 0; const status = () => out.innerHTML = '<div class="stat">Running dork queries ' + n + '/' + DORKS.length + '\u2026</div>'; status();
+  // scoped(): hanya terima URL yang hostname-nya domain sasaran atau subdomainnya (tapis hasil luar)
   const scoped = u => { try { const h = new URL(u).hostname; return h === dom || h.endsWith('.' + dom); } catch(_) { return false; } };
+  // Jalankan SEMUA query serentak (parallel) supaya cepat. Setiap query pulangkan: kategori, query, hasil (hits), dan ralat jika ada
   const res = await Promise.all(DORKS.map(async ([cat, t]) => {
+    // Gantikan {d} dengan domain sebenar
     const q = t.replace('{d}', dom);
     try {
+      // Hantar query ke Serper API (hasil Google, maksimum 10 keputusan). Ambil tajuk & URL sahaja, dan tapis dengan scoped()
       const r = await fetch('https://google.serper.dev/search', {method:'POST', headers:{'X-API-KEY':key,'Content-Type':'application/json'}, body:JSON.stringify({q, num:10})});
       if (!r.ok) throw new Error('HTTP ' + r.status);
       const j = await r.json();
@@ -399,21 +630,28 @@ async function runFullAudit(){
     } catch(e) { return {cat, q, hits:[], err:e.message}; }
     finally { n++; status(); }
   }));
+  // Semua query siap: buang mesej status "Running..."
   out.closest('.msg').remove();
+  // failed = bilangan query yang gagal
   const failed = res.filter(r => r.err).length;
+  // Papar dropdown senarai semua query yang dijalankan beserta bilangan hasil atau ralat
   logMsg('a', '<details><summary>' + res.length + ' dork queries run (tap to view)</summary><ul>' + res.map(r =>
     '<li><code>' + esc(r.q) + '</code> \u2192 ' + (r.err ? 'error: ' + esc(r.err) : r.hits.length + ' result' + (r.hits.length===1?'':'s')) + '</li>').join('') + '</ul></details>');
+  // Kalau SEMUA query gagal: papar sebab (key salah / kredit habis / disekat browser CORS), kemudian berhenti
   if (failed === res.length) {
     const e0 = res[0].err || '';
     logMsg('a', '<p>All searches failed (' + esc(e0) + ').</p><p>' + (/HTTP 40[13]/.test(e0) ? 'Serper rejected the key. Re-check it on serper.dev.' : /HTTP 4(29|00)/.test(e0) ? 'Serper says you are out of credits or rate limited.' : 'The browser blocked the request (CORS, or the page is running inside Claude\u2019s preview). Open this file directly in your browser or on GitHub Pages; if it still fails, Serper needs a small proxy.') + '</p>');
     busy = false; setLocked(limitUntil); saveSession(); return;
   }
+  // Senarai nama kategori (tanpa pendua)
   const cats = [...new Set(res.map(r => r.cat))];
+  // ADA Anthropic key: kumpulkan hasil ikut kategori, hantar kepada Claude untuk tulis laporan penuh (tanpa web search tambahan)
   if (getKey('anthKey')) {
     const data = cats.map(c => ({category:c, queries:res.filter(r => r.cat===c).map(r => ({query:r.q, error:r.err||undefined, hits:r.hits}))}));
     busy = false;
     return callApi('DORK SCAN RESULTS for site:' + dom + ' (' + res.length + ' fixed queries). Write the full exposure report from these only:\n' + JSON.stringify(data), 'Writing report\u2026', true);
   }
+  // TIADA Anthropic key: bina laporan ringkas sendiri. Setiap kategori tunjuk pautan hasil (tanpa pendua) atau "Nothing indexed". hit = bilangan kategori yang ada hasil
   let hit = 0;
   const html = cats.map(c => {
     const items = []; res.filter(r => r.cat===c).forEach(r => r.hits.forEach(h => { if (!items.some(i => i.url===h.url)) items.push(h); }));
@@ -423,13 +661,22 @@ async function runFullAudit(){
   logMsg('a', html);
   busy = false; setLocked(limitUntil); saveSession();
 }
+// ===== PANGGIL AI (CLAUDE) =====
+// callApi(userText, statusText, noTools):
+//   userText   = mesej yang dihantar kepada AI
+//   statusText = teks status sementara ("Writing report...")
+//   noTools    = true bermaksud AI tidak boleh guna web search (untuk laporan daripada hasil dork)
+// Jawapan dialir (streaming) sedikit demi sedikit dan dipaparkan serta-merta.
 async function callApi(userText, statusText, noTools){
   busy = true; goSend.disabled = true; lastReq = {text:userText, status:statusText};
   const out = add('a', '<div class="stat">' + esc(statusText) + '</div>');
   hist.push({role:'user', content:userText});
+  // blocks = potongan respons AI (teks, web search dll); answer = teks jawapan terkumpul
   const blocks = [];
   let answer = '', shownText = false;
   try {
+    // Hantar sejarah perbualan + arahan sistem kepada API Anthropic dengan stream:true.
+    // Kalau bukan noTools, benarkan web search (maksimum 4 kali).
     const r = await fetch('https://api.anthropic.com/v1/messages', {
       method:'POST', headers: apiHeaders(),
       body: JSON.stringify(Object.assign({
@@ -437,7 +684,9 @@ async function callApi(userText, statusText, noTools){
         messages: hist
       }, noTools ? {} : {tools:[{type:'web_search_20250305', name:'web_search', max_uses:4}]}))
     });
+    // Kemas kini paparan baki request daripada header respons
     updateUsage(r);
+    // Respons gagal: baca mesej ralat, tanda sama ada ia ralat had penggunaan, kemudian lempar ralat ke bahagian catch
     if (!r.ok) {
       const d = await r.json().catch(() => ({}));
       const msg = d.error?.message || 'Request failed';
@@ -445,17 +694,23 @@ async function callApi(userText, statusText, noTools){
       err.secs = err.limit ? parseWaitSecs(r, msg) : null; err.status = r.status;
       throw err;
     }
+    // Baca aliran (stream) data sedikit demi sedikit. Data datang dalam bentuk event dipisah baris kosong
     const reader = r.body.getReader(), decoder = new TextDecoder();
     let buf = '';
     while (true) {
       const { value, done } = await reader.read();
       if (done) break;
+      // Sambung data baharu ke buffer, kemudian pecahkan kepada event lengkap (bahagian tidak lengkap disimpan untuk pusingan seterusnya)
       buf += decoder.decode(value, { stream: true });
       const chunks = buf.split('\n\n'); buf = chunks.pop();
       for (const chunk of chunks) {
         const line = chunk.split('\n').find(l => l.startsWith('data:'));
         if (!line) continue;
         let evt; try { evt = JSON.parse(line.slice(5).trim()); } catch (_) { continue; }
+        // Jenis event:
+        //   content_block_start = blok baru bermula (papar "Searching..." kalau AI sedang cari web)
+        //   content_block_delta = potongan teks baru, tambah ke jawapan dan paparkan terus
+        //   error               = ralat dalam stream
         if (evt.type === 'content_block_start') {
           const cb = evt.content_block;
           blocks[evt.index] = cb.type === 'text' ? { type: 'text', text: '' } : cb;
@@ -475,18 +730,22 @@ async function callApi(userText, statusText, noTools){
         }
       }
     }
+    // Selepas stream tamat: kumpulkan pautan sumber daripada hasil web search (tanpa pendua)
     const seen = new Map();
     blocks.forEach(c => {
       if (c && c.type === 'web_search_tool_result' && Array.isArray(c.content))
         c.content.forEach(x => { if (x.url && !seen.has(x.url)) seen.set(x.url, x.title || x.url); });
     });
+    // Bina HTML akhir: jawapan + kotak pautan sumber (maksimum 10)
     let html = md(answer || 'No results came back.');
     if (seen.size) html += '<div class="src">' + [...seen].slice(0,10).map(([u,t]) =>
       '<a href="' + esc(u) + '" target="_blank" rel="noopener noreferrer" title="' + esc(u) + '">' + esc(t) + '</a>').join('') + '</div>';
+    // Papar jawapan akhir dan simpan dalam log serta sejarah perbualan
     out.innerHTML = html;
     displayLog.push({role:'a', html});
     hist.push({role:'assistant', content: answer || '(no answer)'});
   } catch (e) {
+  // Kalau ada ralat: buang mesej user terakhir daripada sejarah; papar kad limit atau mesej ralat mesra
     hist.pop();
     if (e.limit) showLimit(out, e.secs, lastReq);
     else {
@@ -496,8 +755,12 @@ async function callApi(userText, statusText, noTools){
         : 'Something went wrong' + (e.message ? ': ' + esc(e.message) : '') + (e.status === 401 ? '. Your Anthropic key looks invalid; re-copy it.' : e.status === 400 && /credit/i.test(e.message||'') ? '. Add credit under Billing in the Anthropic console.' : e.status === 404 ? '. The model name may be retired.' : '') + '.') + '</p>';
     }
   }
+  // Siap: bebaskan status sibuk, scroll ke bawah dan simpan sesi
   busy = false; setLocked(limitUntil); chat.scrollTop = chat.scrollHeight; saveSession();
 }
+// ===== BORANG SOALAN SUSULAN =====
+// Bila user hantar soalan: abaikan jika kosong / sedang sibuk / limit aktif;
+// kalau tidak, papar soalan dalam chat dan hantar kepada AI
 document.getElementById('f').addEventListener('submit', e => {
   e.preventDefault();
   const text = qEl.value.trim(); if (!text || busy || !DOMAIN || limitUntil > Date.now()) return;
@@ -505,7 +768,9 @@ document.getElementById('f').addEventListener('submit', e => {
   logMsg('u', esc(text));
   callApi(text, 'Checking ' + DOMAIN + '…');
 });
+// Enter = hantar soalan, Shift+Enter = baris baru
 qEl.addEventListener('keydown', e => { if (e.key === 'Enter' && !e.shiftKey) { e.preventDefault(); document.getElementById('f').requestSubmit(); } });
+// Kotak soalan membesar secara automatik mengikut jumlah teks
 qEl.addEventListener('input', () => { qEl.style.height = 'auto'; qEl.style.height = qEl.scrollHeight + 'px'; });
 </script>
 </body>
