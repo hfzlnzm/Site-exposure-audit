@@ -602,6 +602,22 @@ const DORKS = [
  // KATEGORI "Subdomains": subdomain yang diindeks (selain www)
  ['Subdomains','site:*.{d} -site:www.{d}']
 ];
+// ===== MAPPING OWASP TOP 10:2025 (CALON SAHAJA) =====
+// Serper hanya pulangkan tajuk + URL; ia TIDAK beri maklumat OWASP. Mapping ini ditetapkan oleh kita per kategori dork.
+// Ia hanya "candidate": Claude mesti sahkan berdasarkan evidence sebelum pakai, dan boleh tolak jika tak relevan.
+// Sahkan nama/ID kategori dengan https://owasp.org/Top10/ sebelum guna dalam laporan akhir.
+const OWASP_MAP = {
+  'Exposed files': {candidates:['A02 Security Misconfiguration','A01 Broken Access Control','A04 Cryptographic Failures'], note:'Depends on file content and whether it is reachable without authorisation. Do not assume secrets are inside.'},
+  'Sensitive documents': {candidates:['A01 Broken Access Control'], note:'Only relevant if the document is genuinely sensitive and publicly reachable. A keyword match is not proof.'},
+  'Open directories': {candidates:['A02 Security Misconfiguration','A01 Broken Access Control'], note:'Directory listing is a misconfiguration; impact depends on what the listing exposes.'},
+  'Backup archives': {candidates:['A02 Security Misconfiguration','A01 Broken Access Control'], note:'Check if the archive is downloadable without authorisation and holds sensitive data.'},
+  'Version control': {candidates:['A02 Security Misconfiguration','A01 Broken Access Control'], note:'Exposed VCS metadata may leak source code. Verify that it is actually accessible.'},
+  'Admin / login panels': {candidates:['A07 Authentication Failures','A02 Security Misconfiguration'], note:'A login page alone is NOT a vulnerability. Only flag if it is exposed unnecessarily or an admin tool is publicly reachable.'},
+  'Misconfig files': {candidates:['A02 Security Misconfiguration'], note:'phpinfo or server-status pages reveal configuration; impact depends on what is shown.'},
+  'Error messages & debug': {candidates:['A10 Mishandling of Exceptional Conditions','A02 Security Misconfiguration'], note:'Describe what information is leaked. SQL error text may hint at injection risk but does not confirm it.'},
+  'API & dev environments': {candidates:['A02 Security Misconfiguration','A06 Insecure Design'], note:'Public API docs or staging sites are not vulnerabilities by themselves; check for missing access control.'},
+  'Subdomains': {candidates:[], note:'Subdomain listing is reconnaissance information, not a vulnerability. No OWASP mapping unless a specific issue is evidenced.'}
+};
 // ===== FUNGSI UTAMA: AUDIT PENUH =====
 // runFullAudit(): jalankan semua 22 dork melalui Serper, tapis hasil, kemudian:
 //   - ada Anthropic key = minta Claude tulis laporan (callApi)
@@ -647,7 +663,7 @@ async function runFullAudit(){
   const cats = [...new Set(res.map(r => r.cat))];
   // ADA Anthropic key: kumpulkan hasil ikut kategori, hantar kepada Claude untuk tulis laporan penuh (tanpa web search tambahan)
   if (getKey('anthKey')) {
-    const data = cats.map(c => ({category:c, queries:res.filter(r => r.cat===c).map(r => ({query:r.q, error:r.err||undefined, hits:r.hits}))}));
+    const data = cats.map(c => ({category:c, owasp_candidates:(OWASP_MAP[c]||{}).candidates||[], owasp_note:(OWASP_MAP[c]||{}).note||'', queries:res.filter(r => r.cat===c).map(r => ({query:r.q, error:r.err||undefined, hits:r.hits}))}));
     busy = false;
     // Arahan tambahan: penilaian keselamatan (OWASP, CVE/CVSS, remediation). Tiada backtick atau dollar-brace di dalam teks ini.
     const securityInstructions = `
@@ -657,6 +673,7 @@ OWASP:
 - Use OWASP Top 10:2025 categories (A01 Broken Access Control, A02 Security Misconfiguration, A03 Software Supply Chain Failures, A04 Cryptographic Failures, A05 Injection, A06 Insecure Design, A07 Authentication Failures, A08 Software or Data Integrity Failures, A09 Security Logging and Alerting Failures, A10 Mishandling of Exceptional Conditions).
 - Include the OWASP ID and category name.
 - Explain why each finding may relate to that category.
+- Each category in the data has owasp_candidates and owasp_note supplied by the tool. Treat them as candidates only: confirm or reject based on the actual hits, and say when a category has no hits so no mapping applies.
 - Do not force findings into unrelated categories. A login page alone is not a vulnerability.
 Vulnerability Assessment:
 - Explain the suspected issue in simple language.
