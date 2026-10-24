@@ -649,7 +649,43 @@ async function runFullAudit(){
   if (getKey('anthKey')) {
     const data = cats.map(c => ({category:c, queries:res.filter(r => r.cat===c).map(r => ({query:r.q, error:r.err||undefined, hits:r.hits}))}));
     busy = false;
-    return callApi('DORK SCAN RESULTS for site:' + dom + ' (' + res.length + ' fixed queries). Write the full exposure report from these only:\n' + JSON.stringify(data), 'Writing report\u2026', true);
+    // Arahan tambahan: penilaian keselamatan (OWASP, CVE/CVSS, remediation). Tiada backtick atau dollar-brace di dalam teks ini.
+    const securityInstructions = `
+You are a cybersecurity vulnerability assessment analyst.
+Analyse the supplied scan results and produce a detailed security assessment report.
+OWASP:
+- Use OWASP Top 10:2025 categories (A01 Broken Access Control, A02 Security Misconfiguration, A03 Software Supply Chain Failures, A04 Cryptographic Failures, A05 Injection, A06 Insecure Design, A07 Authentication Failures, A08 Software or Data Integrity Failures, A09 Security Logging and Alerting Failures, A10 Mishandling of Exceptional Conditions).
+- Include the OWASP ID and category name.
+- Explain why each finding may relate to that category.
+- Do not force findings into unrelated categories. A login page alone is not a vulnerability.
+Vulnerability Assessment:
+- Explain the suspected issue in simple language.
+- Describe potential impact and risk.
+- Include the evidence and the affected URL (exact URLs from the scan results only, never constructed).
+- Distinguish potential indicators from verified vulnerabilities.
+- State what additional checks are needed.
+CVE and CVSS:
+- Only include CVE IDs and CVSS scores supported by the supplied evidence or trusted vulnerability records.
+- Never invent CVE IDs, scores, affected versions or vectors.
+- If product/version information is missing, say "Insufficient evidence for CVE matching".
+- Explain the severity and limitations of the available data.
+Remediation:
+- Recommend practical defensive fixes.
+- Explain how to verify the fix.
+- Prioritise findings based on evidence and potential impact.
+Use clear headings and explain technical terms.
+Do not claim that a vulnerability is confirmed based on Google search results alone.
+Never reproduce the contents of exposed files, credentials or personal data.
+`;
+    return callApi(
+      securityInstructions +
+      '\n\nDORK SCAN RESULTS for site:' + dom +
+      ' (' + res.length + ' fixed queries).\n' +
+      'Analyse the following evidence:\n' +
+      JSON.stringify(data),
+      'Writing security assessment\u2026',
+      true
+    );
   }
   // TIADA Anthropic key: bina laporan ringkas sendiri. Setiap kategori tunjuk pautan hasil (tanpa pendua) atau "Nothing indexed". hit = bilangan kategori yang ada hasil
   let hit = 0;
