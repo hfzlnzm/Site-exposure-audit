@@ -618,6 +618,68 @@ const OWASP_MAP = {
   'API & dev environments': {candidates:['A02 Security Misconfiguration','A06 Insecure Design'], note:'Public API docs or staging sites are not vulnerabilities by themselves; check for missing access control.'},
   'Subdomains': {candidates:[], note:'Subdomain listing is reconnaissance information, not a vulnerability. No OWASP mapping unless a specific issue is evidenced.'}
 };
+// ===== KESAN TEKNOLOGI & VERSI =====
+// Hanya padanan corak pada URL/tajuk/snippet dari Serper. Versi hanya diisi jika benar-benar tertera (cth ?ver=6.4.1). Tiada versi = tiada padanan CVE.
+const TECH = [
+  {name:'WordPress', cpe:'wordpress:wordpress', re:/wp-(includes|content|admin|json)/i, ver:/wp-includes\/[^?\s"]*\?ver=(\d+\.\d+(?:\.\d+)?)|WordPress (\d+\.\d+(?:\.\d+)?)/i},
+  {name:'Divi theme', cpe:'elegantthemes:divi', re:/themes\/Divi\b/i, ver:/themes\/Divi\/[^?\s"]*\?ver=(\d+\.\d+(?:\.\d+)?)/i},
+  {name:'SimplePie', cpe:'simplepie:simplepie', re:/SimplePie/i, ver:/SimplePie[ \/](\d+\.\d+(?:\.\d+)?)/i},
+  {name:'phpMyAdmin', cpe:'phpmyadmin:phpmyadmin', re:/phpmyadmin/i, ver:/phpMyAdmin (\d+\.\d+(?:\.\d+)?)/i},
+  {name:'Apache HTTP Server', cpe:'apache:http_server', re:/Apache (Status|\/\d)|server-status|server-info/i, ver:/Apache\/(\d+\.\d+\.\d+)/i},
+  {name:'PHP', cpe:'php:php', re:/phpinfo|PHP Version/i, ver:/PHP Version (\d+\.\d+\.\d+)/i}
+];
+function detectTech(items){
+  const found = {};
+  items.forEach(h => {
+    const text = h.url + ' ' + h.title + ' ' + (h.snippet||'');
+    TECH.forEach(t => {
+      if (!t.re.test(text)) return;
+      const f = found[t.name] = found[t.name] || {t, versions:new Set(), urls:[]};
+      const m = t.ver.exec(text); const v = m && (m[1] || m[2]);
+      if (v) f.versions.add(v);
+      if (f.urls.length < 3 && !f.urls.includes(h.url)) f.urls.push(h.url);
+    });
+  });
+  return Object.values(found);
+}
+// ===== CARIAN CVE/CVSS DARI NVD API 2.0 =====
+// Tanpa API key NVD had ialah 5 request / 30 saat, jadi jarak 6.5s antara request dan maksimum 3 produk berversi.
+const sleep = ms => new Promise(r => setTimeout(r, ms));
+function cvssOf(cve){
+  const m = cve.metrics || {};
+  for (const k of ['cvssMetricV40','cvssMetricV31','cvssMetricV30','cvssMetricV2']) {
+    const e = (m[k]||[])[0]; if (e && e.cvssData) return {score:e.cvssData.baseScore, sev:e.cvssData.baseSeverity || e.baseSeverity || '', ver:k.replace('cvssMetric','')};
+  }
+  return null;
+}
+async function nvdQuery(cpe, ver, sev){
+  const vms = 'cpe:2.3:a:' + cpe + ':' + ver + ':*:*:*:*:*:*:*:*';
+  const r = await fetch('https://services.nvd.nist.gov/rest/json/cves/2.0?virtualMatchString=' + encodeURIComponent(vms) + '&cvssV3Severity=' + sev + '&resultsPerPage=3');
+  if (!r.ok) throw new Error('HTTP ' + r.status);
+  return r.json();
+}
+async function buildCveReport(techs){
+  let h = '<p><strong>CVE / CVSS (matched on product + version only)</strong></p>', lookups = 0, reqs = 0;
+  for (const f of techs) {
+    const vers = [...f.versions];
+    if (!vers.length) { h += '<p>' + esc(f.t.name) + ': detected from indexed URLs, version unknown. <em>Insufficient evidence for CVE matching.</em></p>'; continue; }
+    for (const ver of vers) {
+      if (lookups >= 3) { h += '<p>' + esc(f.t.name) + ' ' + esc(ver) + ': skipped (lookup limit reached to respect NVD rate limits).</p>'; continue; }
+      lookups++;
+      try {
+        let line = '', shown = [];
+        for (const sev of ['CRITICAL','HIGH']) {
+          if (reqs++) await sleep(6500);
+          const j = await nvdQuery(f.t.cpe, ver, sev);
+          line += sev + ': ' + j.totalResults + '  ';
+          (j.vulnerabilities||[]).forEach(v => { const c = v.cve, sc = cvssOf(c); const d = ((c.descriptions||[]).find(x => x.lang==='en')||{}).value || ''; shown.push('<li><a href="https://nvd.nist.gov/vuln/detail/' + esc(c.id) + '" target="_blank" rel="noopener noreferrer">' + esc(c.id) + '</a>' + (sc ? ' \u2014 CVSS ' + sc.score + ' ' + esc(sc.sev) + ' (' + esc(sc.ver) + ')' : '') + '<br><small>' + esc(d.slice(0,160)) + (d.length>160?'\u2026':'') + '</small></li>'); });
+        }
+        h += '<p>' + esc(f.t.name) + ' ' + esc(ver) + ' \u2014 CVEs in NVD (CVSS v3): ' + esc(line.trim()) + '</p>' + (shown.length ? '<ul>' + shown.join('') + '</ul>' : '');
+      } catch(e) { h += '<p>' + esc(f.t.name) + ' ' + esc(ver) + ': NVD lookup failed (' + esc(e.message) + '). It may be rate limited or blocked by the browser (CORS).</p>'; }
+    }
+  }
+  return h + '<p><small>Version taken from indexed URLs may not match the live site; verify before relying on it. This product uses the NVD API but is not endorsed or certified by the NVD.</small></p>';
+}
 // ===== FUNGSI UTAMA: AUDIT PENUH =====
 // runFullAudit(): jalankan semua 22 dork melalui Serper, tapis hasil, kemudian:
 //   - ada Anthropic key = minta Claude tulis laporan (callApi)
@@ -642,7 +704,7 @@ async function runFullAudit(){
       const r = await fetch('https://google.serper.dev/search', {method:'POST', headers:{'X-API-KEY':key,'Content-Type':'application/json'}, body:JSON.stringify({q, num:10})});
       if (!r.ok) throw new Error('HTTP ' + r.status);
       const j = await r.json();
-      return {cat, q, hits:(j.organic||[]).filter(x => scoped(x.link)).map(x => ({title:(x.title||x.link).slice(0,100), url:x.link}))};
+      return {cat, q, hits:(j.organic||[]).filter(x => scoped(x.link)).map(x => ({title:(x.title||x.link).slice(0,100), url:x.link, snippet:(x.snippet||'').slice(0,300)}))};
     } catch(e) { return {cat, q, hits:[], err:e.message}; }
     finally { n++; status(); }
   }));
@@ -661,57 +723,26 @@ async function runFullAudit(){
   }
   // Senarai nama kategori (tanpa pendua)
   const cats = [...new Set(res.map(r => r.cat))];
-  // ADA Anthropic key: kumpulkan hasil ikut kategori, hantar kepada Claude untuk tulis laporan penuh (tanpa web search tambahan)
-  if (getKey('anthKey')) {
-    const data = cats.map(c => ({category:c, owasp_candidates:(OWASP_MAP[c]||{}).candidates||[], owasp_note:(OWASP_MAP[c]||{}).note||'', queries:res.filter(r => r.cat===c).map(r => ({query:r.q, error:r.err||undefined, hits:r.hits}))}));
-    busy = false;
-    // Arahan tambahan: penilaian keselamatan (OWASP, CVE/CVSS, remediation). Tiada backtick atau dollar-brace di dalam teks ini.
-    const securityInstructions = `
-You are a cybersecurity vulnerability assessment analyst.
-Analyse the supplied scan results and produce a detailed security assessment report.
-OWASP:
-- Use OWASP Top 10:2025 categories (A01 Broken Access Control, A02 Security Misconfiguration, A03 Software Supply Chain Failures, A04 Cryptographic Failures, A05 Injection, A06 Insecure Design, A07 Authentication Failures, A08 Software or Data Integrity Failures, A09 Security Logging and Alerting Failures, A10 Mishandling of Exceptional Conditions).
-- Include the OWASP ID and category name.
-- Explain why each finding may relate to that category.
-- Each category in the data has owasp_candidates and owasp_note supplied by the tool. Treat them as candidates only: confirm or reject based on the actual hits, and say when a category has no hits so no mapping applies.
-- Do not force findings into unrelated categories. A login page alone is not a vulnerability.
-Vulnerability Assessment:
-- Explain the suspected issue in simple language.
-- Describe potential impact and risk.
-- Include the evidence and the affected URL (exact URLs from the scan results only, never constructed).
-- Distinguish potential indicators from verified vulnerabilities.
-- State what additional checks are needed.
-CVE and CVSS:
-- Only include CVE IDs and CVSS scores supported by the supplied evidence or trusted vulnerability records.
-- Never invent CVE IDs, scores, affected versions or vectors.
-- If product/version information is missing, say "Insufficient evidence for CVE matching".
-- Explain the severity and limitations of the available data.
-Remediation:
-- Recommend practical defensive fixes.
-- Explain how to verify the fix.
-- Prioritise findings based on evidence and potential impact.
-Use clear headings and explain technical terms.
-Do not claim that a vulnerability is confirmed based on Google search results alone.
-Never reproduce the contents of exposed files, credentials or personal data.
-`;
-    return callApi(
-      securityInstructions +
-      '\n\nDORK SCAN RESULTS for site:' + dom +
-      ' (' + res.length + ' fixed queries).\n' +
-      'Analyse the following evidence:\n' +
-      JSON.stringify(data),
-      'Writing security assessment\u2026',
-      true
-    );
-  }
-  // TIADA Anthropic key: bina laporan ringkas sendiri. Setiap kategori tunjuk pautan hasil (tanpa pendua) atau "Nothing indexed". hit = bilangan kategori yang ada hasil
-  let hit = 0;
+  // LAPORAN TERUS (tanpa AI): OWASP dari OWASP_MAP, teknologi dikesan dari URL/tajuk/snippet, CVE+CVSS dari NVD hanya jika versi diketahui
+  let hit = 0; const allItems = [];
   const html = cats.map(c => {
     const items = []; res.filter(r => r.cat===c).forEach(r => r.hits.forEach(h => { if (!items.some(i => i.url===h.url)) items.push(h); }));
-    if (items.length) hit++;
-    return '<p><strong>' + esc(c) + '</strong></p>' + (items.length ? '<ul>' + items.map(h => '<li><a href="' + esc(h.url) + '" target="_blank" rel="noopener noreferrer">' + esc(h.title) + '</a></li>').join('') + '</ul>' : '<p>Nothing indexed.</p>');
-  }).join('') + '<p><strong>' + hit + ' of ' + cats.length + ' checks found indexed items.</strong> Add an Anthropic key for an AI-written report and follow-up questions.</p>' + (failed ? '<p>' + failed + ' quer' + (failed===1?'y':'ies') + ' failed.</p>' : '');
+    if (items.length) { hit++; allItems.push(...items); }
+    const om = OWASP_MAP[c] || {candidates:[], note:''};
+    const owaspLine = items.length ? '<p><strong>OWASP Top 10:2025:</strong> ' + (om.candidates.length ? om.candidates.map(esc).join('; ') : 'No mapping (informational only)') + '<br><small>' + esc(om.note) + '</small></p>' : '';
+    return '<p><strong>' + esc(c) + '</strong></p>' + owaspLine + (items.length ? '<ul>' + items.map(h => '<li><a href="' + esc(h.url) + '" target="_blank" rel="noopener noreferrer">' + esc(h.title) + '</a></li>').join('') + '</ul>' : '<p>Nothing indexed.</p>');
+  }).join('') + '<p><strong>' + hit + ' of ' + cats.length + ' checks found indexed items.</strong> These are indicators from search results, not confirmed vulnerabilities. OWASP categories are candidates assigned by the tool.</p>' + (failed ? '<p>' + failed + ' quer' + (failed===1?'y':'ies') + ' failed.</p>' : '');
   logMsg('a', html);
+  // ----- Kesan teknologi + versi daripada hasil Serper -----
+  const techs = detectTech(allItems);
+  if (techs.length) {
+    const st = add('a', '<div class="stat">Looking up CVE / CVSS in NVD\u2026</div>');
+    const cveHtml = await buildCveReport(techs);
+    st.closest('.msg').remove();
+    logMsg('a', cveHtml);
+  } else {
+    logMsg('a', '<p><strong>CVE / CVSS</strong></p><p>No product or version could be identified from the results, so no CVE matching was done.</p>');
+  }
   busy = false; setLocked(limitUntil); saveSession();
 }
 // ===== PANGGIL AI (CLAUDE) =====
