@@ -244,6 +244,22 @@ details.plain summary{color:var(--acc);font-size:13px;margin:2px 0 8px}
 .ban{background:var(--ambbg);color:var(--amb);border-radius:12px;padding:10px 14px;font-size:13px}
 .foot{display:flex;flex-direction:column;gap:8px;font-size:12px;color:var(--mut)}
 @media (max-width:380px){.ring{width:92px;height:92px}.ring .num b{font-size:26px}.hero .lvl{font-size:19px}}
+
+/* iOS: elak saiz teks dibesarkan secara automatik */
+html{-webkit-text-size-adjust:100%;text-size-adjust:100%}
+/* Grid satu lajur dahulu; dua lajur hanya pada skrin lebar */
+.rp .grid{grid-template-columns:1fr}
+@media (min-width:1000px){.rp .grid{grid-template-columns:repeat(2,1fr)}}
+.sh+.kr,.card>.wr:first-child{border-top:0}
+.k-cve{--k:var(--hi)}
+/* Blok produk + baris CVE */
+.pr{border-top:1px solid var(--line);padding-top:12px;display:flex;flex-direction:column;gap:6px}
+.pr:first-of-type{border-top:0;padding-top:0}
+.prh{display:flex;justify-content:space-between;align-items:flex-start;gap:10px}
+.cv{display:flex;flex-direction:column;gap:4px;padding:8px 0;border-top:1px solid var(--line)}
+.cv .l1{display:flex;align-items:center;gap:8px;flex-wrap:wrap}
+.cv a{font:13px ui-monospace,Menlo,monospace}
+.vec{font:11px ui-monospace,Menlo,monospace;color:var(--mut);overflow-wrap:anywhere}
 </style>
 <!--
    ===== BAHAGIAN 2: HTML (struktur halaman) =====
@@ -726,43 +742,34 @@ function detectTech(items){
   });
   return Object.values(found);
 }
-// ===== CARIAN CVE/CVSS DARI NVD API 2.0 =====
-// Tanpa API key NVD had ialah 5 request / 30 saat, jadi jarak 6.5s antara request dan maksimum 3 produk berversi.
-const sleep = ms => new Promise(r => setTimeout(r, ms));
-function cvssOf(cve){
-  const m = cve.metrics || {};
-  for (const k of ['cvssMetricV40','cvssMetricV31','cvssMetricV30','cvssMetricV2']) {
-    const e = (m[k]||[])[0]; if (e && e.cvssData) return {score:e.cvssData.baseScore, sev:e.cvssData.baseSeverity || e.baseSeverity || '', ver:k.replace('cvssMetric','')};
-  }
-  return null;
+// ===== CVE / CVSS (melalui backend api/cve.js) =====
+// Versi dikumpul daripada 2 sumber: URL yang diindeks (detectTech) dan homepage hidup (val.site.tech).
+// Produk berversi = padanan tepat dalam NVD. Produk tanpa versi = papar CVE kritikal yang diketahui untuk produk itu (ditanda "unconfirmed").
+function mergeProducts(urlTechs, siteTech){
+  const m = new Map();
+  const get = (name, cpe) => { if (!m.has(name)) m.set(name, {name, cpe, vers:new Map()}); return m.get(name); };
+  urlTechs.forEach(f => { const p = get(f.t.name, f.t.cpe); f.versions.forEach(v => { if (!p.vers.has(v)) p.vers.set(v, 'indexed URL'); }); });
+  (siteTech || []).forEach(t => { const p = get(t.name, t.cpe); if (!p.vers.has(t.version)) p.vers.set(t.version, t.source); });
+  return [...m.values()];
 }
-async function nvdQuery(cpe, ver, sev){
-  const vms = 'cpe:2.3:a:' + cpe + ':' + ver + ':*:*:*:*:*:*:*:*';
-  const r = await fetch('https://services.nvd.nist.gov/rest/json/cves/2.0?virtualMatchString=' + encodeURIComponent(vms) + '&cvssV3Severity=' + sev + '&resultsPerPage=3');
-  if (!r.ok) throw new Error('HTTP ' + r.status);
-  return r.json();
-}
-async function buildCveReport(techs){
-  let h = '<p><strong>CVE / CVSS (matched on product + version only)</strong></p>', lookups = 0, reqs = 0;
-  for (const f of techs) {
-    const vers = [...f.versions];
-    if (!vers.length) { h += '<p>' + esc(f.t.name) + ': detected from indexed URLs, version unknown. <em>Insufficient evidence for CVE matching.</em></p>'; continue; }
-    for (const ver of vers) {
-      if (lookups >= 3) { h += '<p>' + esc(f.t.name) + ' ' + esc(ver) + ': skipped (lookup limit reached to respect NVD rate limits).</p>'; continue; }
-      lookups++;
-      try {
-        let line = '', shown = [];
-        for (const sev of ['CRITICAL','HIGH']) {
-          if (reqs++) await sleep(6500);
-          const j = await nvdQuery(f.t.cpe, ver, sev);
-          line += sev + ': ' + j.totalResults + '  ';
-          (j.vulnerabilities||[]).forEach(v => { const c = v.cve, sc = cvssOf(c); const d = ((c.descriptions||[]).find(x => x.lang==='en')||{}).value || ''; shown.push('<li><a href="https://nvd.nist.gov/vuln/detail/' + esc(c.id) + '" target="_blank" rel="noopener noreferrer">' + esc(c.id) + '</a>' + (sc ? ' \u2014 CVSS ' + sc.score + ' ' + esc(sc.sev) + ' (' + esc(sc.ver) + ')' : '') + '<br><small>' + esc(d.slice(0,160)) + (d.length>160?'\u2026':'') + '</small></li>'); });
-        }
-        h += '<p>' + esc(f.t.name) + ' ' + esc(ver) + ' \u2014 CVEs in NVD (CVSS v3): ' + esc(line.trim()) + '</p>' + (shown.length ? '<ul>' + shown.join('') + '</ul>' : '');
-      } catch(e) { h += '<p>' + esc(f.t.name) + ' ' + esc(ver) + ': NVD lookup failed (' + esc(e.message) + '). It may be rate limited or blocked by the browser (CORS).</p>'; }
+async function lookupCves(prods, setStat){
+  const jobs = [];
+  prods.forEach(p => { if (p.vers.size) [...p.vers].slice(0, 2).forEach(([ver, src]) => jobs.push({name:p.name, cpe:p.cpe, version:ver, source:src})); else jobs.push({name:p.name, cpe:p.cpe, version:null, source:'detected from indexed URLs'}); });
+  jobs.sort((a, b) => (b.version ? 1 : 0) - (a.version ? 1 : 0));
+  const run = jobs.slice(0, 6), results = []; let error = '';
+  for (let i = 0; i < run.length; i++) {
+    const j = run[i]; setStat('Looking up CVE / CVSS (' + (i + 1) + '/' + run.length + ')\u2026');
+    try {
+      const r = await fetch(API_BASE + '/api/cve', {method:'POST', headers:{'content-type':'application/json'}, body:JSON.stringify({name:j.name, cpe:j.cpe, version:j.version}), signal:AbortSignal.timeout(65000)});
+      const d = await r.json().catch(() => ({}));
+      if (!r.ok) throw new Error(d.error || 'HTTP ' + r.status);
+      results.push(Object.assign({source:j.source}, d));
+    } catch(e) {
+      results.push({name:j.name, version:j.version, confirmed:!!j.version, source:j.source, error:e.message});
+      if (/HTTP 404|Failed to fetch|NetworkError/i.test(e.message)) { error = 'backend /api/cve not reachable'; break; }
     }
   }
-  return h + '<p><small>Version taken from indexed URLs may not match the live site; verify before relying on it. This product uses the NVD API but is not endorsed or certified by the NVD.</small></p>';
+  return {results, error, skipped: jobs.length - run.length};
 }
 // ===== MODUL PASIF + SKOR RISIKO (kod sendiri, tanpa API berbayar) =====
 // 1) DNS dan konfigurasi e-mel (SPF, DMARC, CAA) melalui DNS-over-HTTPS Cloudflare (percuma, CORS dibenarkan)
@@ -800,7 +807,7 @@ async function runValidate(dom, items){
   return r.json();
 }
 // runPassive(): jalankan semakan DNS/e-mel/subdomain, kira skor, dan PULANGKAN data (paparan dibuat oleh renderReport)
-async function runPassive(dom, res, val){
+async function runPassive(dom, res, val, cve){
   const [spf, dmarc, caa, ns, subs] = await Promise.allSettled([
     doh(dom,'TXT'), doh('_dmarc.' + dom,'TXT'), doh(dom,'CAA'), doh(dom,'NS'), ctSubs(dom)]);
   const ok = x => x.status === 'fulfilled';
@@ -819,6 +826,12 @@ async function runPassive(dom, res, val){
     if (live.length) { pt('exp', w, c + ' confirmed live' + (sig ? ' (sensitive signature)' : '')); P.cat[c] = {state:'live', sig}; }
     else if (guarded) { pt('exp', Math.round(w / 2), c + ' exists but access-controlled'); P.cat[c] = {state:'guarded'}; }
     else { pt('exp', 0, c + ' indexed but no longer reachable'); P.cat[c] = {state:'gone'}; }
+  });
+  // Skor CVE: hanya untuk produk yang versinya DISAHKAN. Ada CVE Critical (CVSS >= 9.0) = +10, jika tiada tetapi ada High (7.0-8.9) = +5
+  ((cve && cve.results) || []).filter(r => r.confirmed && !r.error && r.counts).forEach(r => {
+    const t = r.name + ' ' + r.version;
+    if (r.counts.critical) pt('cve', 10, t + ': ' + r.counts.critical + ' critical CVE' + (r.counts.critical === 1 ? '' : 's') + ' (CVSS 9.0+)');
+    else if (r.counts.high) pt('cve', 5, t + ': ' + r.counts.high + ' high CVE' + (r.counts.high === 1 ? '' : 's') + ' (CVSS 7.0–8.9)');
   });
   if (ok(spf)) {
     const has = spf.value.some(t => /^v=spf1/i.test(t));
@@ -862,7 +875,7 @@ async function runPassive(dom, res, val){
 
 // ===== PAPARAN LAPORAN (DASHBOARD) =====
 const HDR_SHORT = {'strict-transport-security':'HSTS','content-security-policy':'CSP','x-frame-options':'X-Frame-Options','x-content-type-options':'X-Content-Type-Options','referrer-policy':'Referrer-Policy','permissions-policy':'Permissions-Policy'};
-const KIND_LABEL = {exp:'Exposures', dns:'DNS & mail', hdr:'Headers', srf:'Attack surface'};
+const KIND_LABEL = {exp:'Exposures', cve:'CVE (CVSS)', dns:'DNS & mail', hdr:'Headers', srf:'Attack surface'};
 const LVL_CLASS = {Critical:'sev-critical', High:'sev-high', Moderate:'sev-mod', Low:'sev-low'};
 // state dork -> [warna, label]
 const CAT_STATE = {live:['bad','Live'], guarded:['amb','Access-controlled'], indexed:['hi','Indexed'], gone:['neu','Not reachable']};
@@ -894,9 +907,40 @@ function catCard(c, items, st, V){
 const kvRow = (k, v, s) => '<div class="kr s-' + s + '"><span class="dt"></span><span class="k">' + esc(k) + '</span><span class="v">' + v + '</span></div>';
 const card = (title, meta, body, cls) => '<div class="card' + (cls ? ' ' + cls : '') + '"><div class="sh"><h3>' + esc(title) + '</h3>' + (meta ? '<span>' + esc(meta) + '</span>' : '') + '</div>' + body + '</div>';
 
+
+// ===== KAD CVE / CVSS =====
+// Julat tahap CVSS mengikut FIRST: Low 0.1-3.9, Medium 4.0-6.9, High 7.0-8.9, Critical 9.0-10.0
+const SEV_COLOR = {Critical:'bad', High:'hi', Medium:'amb', Low:'neu'};
+const cvssPill = (score, sev) => score == null ? pill('neu', 'No CVSS') : pill(SEV_COLOR[sev] || 'neu', score.toFixed(1) + ' ' + sev);
+function cveRow(c){
+  return '<div class="cv"><div class="l1"><a href="https://nvd.nist.gov/vuln/detail/' + esc(c.id) + '" target="_blank" rel="noopener noreferrer">' + esc(c.id) + '</a>' + cvssPill(c.score, c.sev) + (c.kev ? pill('bad', 'Exploited (CISA KEV)') : '') + '</div>' +
+    '<div class="mini">' + esc(c.desc) + (c.desc.length >= 220 ? '\u2026' : '') + '</div>' + (c.vector ? '<div class="vec">CVSS v' + esc(c.ver) + ' ' + esc(c.vector) + '</div>' : '') + '</div>';
+}
+function cveCard(cve){
+  const R = (cve && cve.results) || [];
+  let body = '';
+  if (!R.length) body = '<div class="mini">' + (cve && cve.error ? 'CVE lookup unavailable (' + esc(cve.error) + ').' : 'No software or version could be identified from the homepage headers, page source or indexed URLs, so there is nothing to match against NVD.') + '</div>';
+  else body = R.map(r => {
+    const title = esc(r.name) + (r.version ? ' ' + esc(r.version) : '');
+    let pills = '', inner = '';
+    if (r.error) { pills = pill('neu', 'lookup failed'); inner = '<div class="mini">' + esc(r.error) + '</div>'; }
+    else if (r.confirmed) {
+      pills = pill(r.counts.critical ? 'bad' : 'neu', r.counts.critical + ' Critical') + pill(r.counts.high ? 'hi' : 'neu', r.counts.high + ' High');
+      inner = r.items.length ? r.items.map(cveRow).join('') : '<div class="mini">No CVSS v3 High or Critical CVEs match this exact version in NVD.</div>';
+      if (r.partial) inner += '<div class="mini">Top 5 chosen from the first 100 results per severity.</div>';
+    } else {
+      pills = pill('neu', 'version unconfirmed');
+      inner = r.items.length ? '<details class="plain"><summary>Show critical CVEs known for this product (may not apply)</summary>' + r.items.map(cveRow).join('') + '</details>' : '<div class="mini">No critical CVEs on record for this product.</div>';
+    }
+    return '<div class="pr"><div class="prh"><div><b>' + title + '</b><div class="mini">' + esc(r.confirmed ? 'version from ' + r.source : r.source) + '</div></div><div class="chips">' + pills + '</div></div>' + inner + '</div>';
+  }).join('') + (cve.skipped ? '<div class="mini">' + cve.skipped + ' more product lookup(s) skipped to respect NVD rate limits.</div>' : '');
+  return card('Technology & CVE', 'CVSS base scores from NVD', body +
+    '<div class="mini">Scores use CVSS v4.0 when NVD has it, otherwise v3.1, v3.0 or v2.0. Only CVSS v3 High and Critical are fetched. The version is read from the live homepage or indexed URLs and may differ from the real installation.</div>', 'wide');
+}
+
 // renderReport(): bina SATU dashboard daripada semua data audit
 function renderReport(x){
-  const {dom, res, groups, techs, cveHtml, val, P, perr, failed} = x;
+  const {dom, res, groups, cve, val, P, perr, failed} = x;
   const V = val && val.urls ? val.urls : null;
   const hits = groups.filter(g => g.items.length), clear = groups.filter(g => !g.items.length);
   const stOf = g => ((P && P.cat[g.cat]) || {}).state || 'indexed';
@@ -912,6 +956,9 @@ function renderReport(x){
     if (cnt.live) parts.push(cnt.live + ' exposure ' + (cnt.live === 1 ? 'category' : 'categories') + ' confirmed live');
     if (cnt.indexed) parts.push(cnt.indexed + ' indexed, not validated');
     if (cnt.guarded) parts.push(cnt.guarded + ' behind access control');
+    let top = null;
+    ((cve && cve.results) || []).forEach(r => { if (r.confirmed && !r.error) (r.items || []).forEach(i => { if (i.score != null && (!top || i.score > top.score)) top = i; }); });
+    if (top) parts.push('highest CVSS ' + top.score.toFixed(1) + ' (' + top.id + ')');
     if (missH) parts.push(missH + ' security ' + (missH === 1 ? 'header' : 'headers') + ' missing');
     if (dnsGaps) parts.push(dnsGaps + ' DNS/mail ' + (dnsGaps === 1 ? 'gap' : 'gaps'));
     const tot = {}; P.why.forEach(w => tot[w.kind] = (tot[w.kind] || 0) + w.pts);
@@ -951,7 +998,7 @@ function renderReport(x){
       kvRow('Name servers', P.dns.ns.length ? '<div class="chips">' + P.dns.ns.map(n => '<span class="chip">' + esc(n.replace(/\.$/, '')) + '</span>').join('') + '</div>' : 'Unknown', 'neu')));
     // Fail tapak
     if (P.files) {
-      const fr = (p, bad) => { const c = P.files[p]; return kvRow(p.replace('/.well-known', '.well-known'), c === 200 ? '200 OK' : c === 'error' || c == null ? 'No response' : esc(String(c)) + ' not found', c === 200 ? 'good' : bad); };
+      const fr = (p, bad) => { const c = P.files[p]; return kvRow(p.split('/').pop(), c === 200 ? '200 OK' : c === 'error' || c == null ? 'No response' : esc(String(c)) + ' not found', c === 200 ? 'good' : bad); };
       cards.push(card('Site files', '', fr('/robots.txt', 'neu') + fr('/sitemap.xml', 'neu') + fr('/.well-known/security.txt', 'amb') +
         (P.disallow.length ? '<div class="mini">Disallowed in robots.txt</div><div class="chips">' + P.disallow.map(p => '<span class="chip">' + esc(p) + '</span>').join('') + '</div>' : '')));
     }
@@ -966,9 +1013,7 @@ function renderReport(x){
     }
     cards.push(card('Subdomains', sm, sb));
   }
-  // Teknologi & CVE
-  const techChips = techs.length ? '<div class="chips">' + techs.map(f => '<span class="chip">' + esc(f.t.name + (f.versions.size ? ' ' + [...f.versions].join(', ') : '')) + '</span>').join('') + '</div>' : '';
-  cards.push(card('Technology & CVE', 'matched on product + version only', techChips + cveHtml.replace(/^<p><strong>CVE \/ CVSS[^<]*<\/strong><\/p>/, ''), 'wide'));
+  cards.push(cveCard(cve));
   out += '<div class="sec"><h3>Details</h3><div class="grid">' + cards.join('') + '</div></div>';
 
   // 5) Pecahan skor
@@ -1027,21 +1072,20 @@ async function runFullAudit(){
   const groups = cats.map(c => { const items = []; res.filter(r => r.cat === c).forEach(r => r.hits.forEach(h => { if (!items.some(i => i.url === h.url)) items.push(h); })); return {cat:c, items}; });
   const allItems = groups.flatMap(g => g.items);
   try {
-    // Kesan teknologi + versi, kemudian CVE/CVSS dari NVD (hanya jika versi diketahui)
-    const techs = detectTech(allItems);
-    let cveHtml;
-    if (techs.length) { setStat('Looking up CVE / CVSS in NVD\u2026'); cveHtml = await buildCveReport(techs); }
-    else cveHtml = '<p>No product or version could be identified from the results, so no CVE matching was done.</p>';
-    // Pengesahan melalui backend
+    // 1) Pengesahan melalui backend (juga baca versi software daripada homepage)
     setStat('Validating findings\u2026');
     let val = null;
     try { val = await runValidate(dom, allItems); } catch(e) { val = {error: e.message}; }
-    // Semakan pasif + skor
+    // 2) Gabung versi dari URL diindeks + homepage, kemudian CVE/CVSS dari NVD (backend)
+    const prods = mergeProducts(detectTech(allItems), val && val.site && val.site.tech);
+    let cve = {results:[], error:'', skipped:0};
+    if (prods.length) cve = await lookupCves(prods, setStat);
+    // 3) Semakan pasif + skor
     setStat('Running passive checks (DNS, mail, subdomains)\u2026');
     let P = null, perr = '';
-    try { P = await runPassive(dom, res, val); } catch(e) { perr = e.message; }
+    try { P = await runPassive(dom, res, val, cve); } catch(e) { perr = e.message; }
     dropStat();
-    logMsg('a', renderReport({dom, res, groups, techs, cveHtml, val, P, perr, failed}));
+    logMsg('a', renderReport({dom, res, groups, cve, val, P, perr, failed}));
   } catch(e) {
     dropStat();
     logMsg('a', '<p>The report could not be built: ' + esc(e.message) + '.</p>');
