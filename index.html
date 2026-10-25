@@ -758,7 +758,7 @@ async function runPassive(dom, res, val){
       if (miss.includes('x-frame-options')) { score += 2; why.push('+2 missing x-frame-options'); }
     }
     const f = st.files || {};
-    rows.push('robots.txt: ' + esc(f['/robots.txt']) + ', sitemap.xml: ' + esc(f['/sitemap.xml']) + ', security.txt: ' + esc(f['/.well-known/security.txt']));
+    rows.push('robots.txt: ' + esc(String(f['/robots.txt'])) + ', sitemap.xml: ' + esc(String(f['/sitemap.xml'])) + ', security.txt: ' + esc(String(f['/.well-known/security.txt'])));
     if ((st.disallow || []).length) rows.push('robots.txt Disallow paths: ' + st.disallow.slice(0,10).map(esc).join(', '));
   } else rows.push('Backend validation: ' + (val && val.error ? 'unavailable (' + esc(val.error) + ')' : 'not run') + '. Dork findings counted at half weight.');
   let subHtml;
