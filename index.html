@@ -211,7 +211,6 @@ button.s:disabled{background:var(--surf);color:var(--mut);box-shadow:none;cursor
     <!--
        Kotak tick: user mesti sahkan dia pemilik / ada kebenaran bertulis
     -->
-    <label class="ack"><input type="checkbox" id="ack"> I own this domain, or have written authorization to test it.</label>
     <!--
        API key: Serper (wajib), Anthropic (pilihan, untuk laporan AI). Disimpan dalam browser sahaja
     -->
@@ -252,7 +251,7 @@ button.s:disabled{background:var(--surf);color:var(--mut);box-shadow:none;cursor
 // DOMAIN = domain yang sedang diaudit (kosong = belum mula)
 let DOMAIN = '';
 // Ambil elemen-elemen borang dari HTML supaya boleh digunakan dalam kod
-const domInput = document.getElementById('domInput'), ack = document.getElementById('ack'), hint = document.getElementById('hint'), domGo = document.getElementById('domGo');
+const domInput = document.getElementById('domInput'), hint = document.getElementById('hint'), domGo = document.getElementById('domGo');
 // clean(): bersihkan input user.
 // Contoh: "  HTTPS://Example.com/page " menjadi "example.com"
 // (trim, huruf kecil, buang http(s):// dan apa-apa selepas "/")
@@ -270,12 +269,11 @@ function saveKeys(){ try { localStorage.setItem(KEYS_STORE, JSON.stringify({s:ge
 // Setiap kali user menaip dalam kotak key: simpan & kemas kini status butang
 ['serperKey','anthKey'].forEach(id => document.getElementById(id).addEventListener('input', () => { saveKeys(); syncGo(); }));
 // syncGo(): butang mula hanya aktif bila: domain sah + kotak kebenaran ditick + Serper key diisi
-function syncGo(){ domGo.disabled = !(validDomain() && ack.checked && getKey('serperKey')); }
+function syncGo(){ domGo.disabled = !(validDomain() && getKey('serperKey')); }
 // tryStart(): cuba mulakan audit. Kalau ada syarat tidak lengkap, tunjuk hint; kalau lengkap panggil startAudit()
 function tryStart(){
   const d = clean(domInput.value);
   if (!validDomain()) { hint.textContent = 'Enter a valid domain, e.g. yourdomain.com'; return; }
-  if (!ack.checked) { hint.textContent = 'Check the authorization box first.'; return; }
   if (!getKey('serperKey')) { hint.textContent = 'Enter your Serper API key.'; return; }
   startAudit(d);
 }
@@ -285,7 +283,6 @@ domInput.addEventListener('input', () => { hint.textContent = ''; syncGo(); });
 // Tekan Enter dalam kotak domain = cuba mula audit
 domInput.addEventListener('keydown', e => { if (e.key === 'Enter') { e.preventDefault(); tryStart(); } });
 // Bila tick/untick kotak kebenaran: semak semula butang
-ack.addEventListener('change', () => { hint.textContent = ''; syncGo(); });
 // Klik butang anak panah = cuba mula audit
 domGo.addEventListener('click', tryStart);
 
@@ -301,7 +298,7 @@ document.getElementById('changeDom').addEventListener('click', () => {
   document.getElementById('domBar').style.display = 'none';
   // Tunjuk skrin permulaan semula, sembunyikan chat & borang soalan
   document.getElementById('gateCenter').style.display = 'block';
-  domInput.value = ''; ack.checked = false; hint.textContent = ''; syncGo();
+  domInput.value = ''; hint.textContent = ''; syncGo();
   domInput.focus();
   renderRecents();
 });
@@ -691,15 +688,31 @@ async function doh(name, type){
   return (j.Answer || []).map(a => String(a.data).replace(/^"|"$/g,'').replace(/" "/g,''));
 }
 async function ctSubs(d){
-  const r = await fetch('https://crt.sh/?q=%25.' + encodeURIComponent(d) + '&output=json', {signal:AbortSignal.timeout(20000)});
-  if (!r.ok) throw new Error('HTTP ' + r.status);
-  const j = await r.json(), s = new Set();
-  j.forEach(c => String(c.name_value).split('\n').forEach(n => { n = n.trim().toLowerCase().replace(/^\*\./,''); if (n === d || n.endsWith('.' + d)) s.add(n); }));
+  const add = (j, s, f) => j.forEach(c => f(c).forEach(n => { n = n.trim().toLowerCase().replace(/^\*\./,''); if (n === d || n.endsWith('.' + d)) s.add(n); }));
+  const s = new Set();
+  try {
+    const r = await fetch('https://crt.sh/?q=%25.' + encodeURIComponent(d) + '&output=json', {signal:AbortSignal.timeout(45000)});
+    if (!r.ok) throw new Error('HTTP ' + r.status);
+    add(await r.json(), s, c => String(c.name_value).split('\n'));
+  } catch(e1) {
+    const r = await fetch('https://api.certspotter.com/v1/issuances?domain=' + encodeURIComponent(d) + '&include_subdomains=true&expand=dns_names', {signal:AbortSignal.timeout(30000)});
+    if (!r.ok) throw new Error('crt.sh: ' + e1.message + '; certspotter: HTTP ' + r.status);
+    add(await r.json(), s, c => c.dns_names || []);
+  }
   return [...s].sort();
 }
 // Pemberat markah per kategori dork (dikira sekali sahaja jika ada sekurang-kurangnya satu hasil)
 const WEIGHTS = {'Exposed files':25,'Version control':25,'Sensitive documents':15,'Backup archives':15,'Open directories':10,'Misconfig files':10,'Admin / login panels':8,'Error messages & debug':8,'API & dev environments':8,'Subdomains':2};
-async function runPassive(dom, res){
+// ===== PENGESAHAN MELALUI BACKEND (api/validate.js) =====
+// API_BASE kosong = backend di alamat yang sama (Vercel). Jika index.html di GitHub Pages, isi dengan alamat Vercel kamu.
+const API_BASE = '';
+async function runValidate(dom, items){
+  const urls = [...new Set(items.map(i => i.url))].slice(0, 30);
+  const r = await fetch(API_BASE + '/api/validate', {method:'POST', headers:{'content-type':'application/json'}, body:JSON.stringify({domain:dom, urls}), signal:AbortSignal.timeout(60000)});
+  if (!r.ok) throw new Error('HTTP ' + r.status);
+  return r.json();
+}
+async function runPassive(dom, res, val){
   const st = add('a', '<div class="stat">Running passive checks (DNS, mail, subdomains)\u2026</div>');
   const [spf, dmarc, caa, ns, subs] = await Promise.allSettled([
     doh(dom,'TXT'), doh('_dmarc.' + dom,'TXT'), doh(dom,'CAA'), doh(dom,'NS'), ctSubs(dom)]);
@@ -707,7 +720,17 @@ async function runPassive(dom, res){
   const ok = x => x.status === 'fulfilled';
   const rows = [], why = []; let score = 0;
   const hitCats = [...new Set(res.filter(r => r.hits.length).map(r => r.cat))];
-  hitCats.forEach(c => { const w = WEIGHTS[c] || 0; score += w; why.push('+' + w + ' ' + c + ' indexed'); });
+  const V = val && val.urls ? val.urls : null;
+  hitCats.forEach(c => {
+    const w = WEIGHTS[c] || 0, urls = res.filter(r => r.cat === c).flatMap(r => r.hits.map(h => h.url));
+    if (!V) { const h = Math.round(w / 2); score += h; why.push('+' + h + ' ' + c + ' indexed (not validated)'); return; }
+    const live = urls.filter(u => V[u] && V[u].status >= 200 && V[u].status < 300);
+    const sig = live.some(u => V[u].sig);
+    const guarded = urls.some(u => V[u] && (V[u].status === 401 || V[u].status === 403));
+    if (live.length) { score += w; why.push('+' + w + ' ' + c + ' CONFIRMED live' + (sig ? ' (sensitive signature)' : '')); }
+    else if (guarded) { const h = Math.round(w / 2); score += h; why.push('+' + h + ' ' + c + ' exists but access-controlled'); }
+    else why.push('+0 ' + c + ' indexed but no longer reachable');
+  });
   if (ok(spf)) {
     const has = spf.value.some(t => /^v=spf1/i.test(t));
     rows.push('SPF: ' + (has ? 'present' : '<strong>missing</strong>'));
@@ -725,6 +748,18 @@ async function runPassive(dom, res){
     if (!caa.value.length) { score += 3; why.push('+3 no CAA record'); }
   } else rows.push('CAA: lookup failed');
   rows.push('Name servers: ' + (ok(ns) && ns.value.length ? ns.value.map(esc).join(', ') : 'unknown'));
+  if (val && val.site) {
+    const st = val.site, miss = Object.entries(st.headers || {}).filter(([, v]) => v === 'missing').map(([k]) => k);
+    if (st.error) rows.push('Security headers: unavailable (' + esc(st.error) + ')');
+    else {
+      rows.push('Security headers: ' + (miss.length ? '<strong>' + miss.length + ' missing</strong> (' + miss.map(esc).join(', ') + ')' : 'all present'));
+      ['strict-transport-security','content-security-policy'].forEach(h => { if (miss.includes(h)) { score += 4; why.push('+4 missing ' + h); } });
+      if (miss.includes('x-frame-options')) { score += 2; why.push('+2 missing x-frame-options'); }
+    }
+    const f = st.files || {};
+    rows.push('robots.txt: ' + esc(f['/robots.txt']) + ', sitemap.xml: ' + esc(f['/sitemap.xml']) + ', security.txt: ' + esc(f['/.well-known/security.txt']));
+    if ((st.disallow || []).length) rows.push('robots.txt Disallow paths: ' + st.disallow.slice(0,10).map(esc).join(', '));
+  } else rows.push('Backend validation: ' + (val && val.error ? 'unavailable (' + esc(val.error) + ')' : 'not run') + '. Dork findings counted at half weight.');
   let subHtml;
   if (ok(subs)) {
     const list = subs.value.filter(x => x !== dom);
@@ -739,7 +774,7 @@ async function runPassive(dom, res){
   logMsg('a', '<p><strong>Passive checks</strong></p><ul>' + rows.map(r => '<li>' + r + '</li>').join('') + '</ul>' + subHtml +
     '<p><strong>Risk score: ' + score + '/100 (' + level + ')</strong></p>' +
     (why.length ? '<ul>' + why.map(w => '<li>' + esc(w) + '</li>').join('') + '</ul>' : '<p>No weighted findings.</p>') +
-    '<p><small>Score = sum of weights per category with indexed results plus DNS/mail checks, capped at 100. It is an indicator based on search results and public DNS data, not proof of a vulnerability. Security headers, live URL validation and robots.txt need a backend (not possible from a static page).</small></p>');
+    '<p><small>Score = sum of weights per category with indexed results plus DNS/mail checks, capped at 100. It is an indicator based on search results and public DNS data, not proof of a vulnerability. Findings are validated by the backend when available.</small></p>');
 }
 // ===== FUNGSI UTAMA: AUDIT PENUH =====
 // runFullAudit(): jalankan semua 22 dork melalui Serper, tapis hasil, kemudian:
@@ -804,7 +839,10 @@ async function runFullAudit(){
   } else {
     logMsg('a', '<p><strong>CVE / CVSS</strong></p><p>No product or version could be identified from the results, so no CVE matching was done.</p>');
   }
-  await runPassive(dom, res);
+  let val = null;
+  try { const vs = add('a', '<div class="stat">Validating findings\u2026</div>'); val = await runValidate(dom, allItems); vs.closest('.msg').remove(); }
+  catch(e) { val = {error: e.message}; document.querySelectorAll('.stat').forEach(x => x.closest('.msg') && x.closest('.msg').remove()); }
+  await runPassive(dom, res, val);
   busy = false; setLocked(limitUntil); saveSession();
 }
 // ===== PANGGIL AI (CLAUDE) =====
