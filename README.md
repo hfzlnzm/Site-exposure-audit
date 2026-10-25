@@ -6,11 +6,11 @@ Live tool: https://site-exposure-audit.vercel.app
 
 Site Exposure Audit is a browser-based tool that runs Google dorking against a domain, validates what it finds against the live site, checks DNS/mail/header posture, and matches detected software versions against known CVEs in the NVD. Results are shown as a single dashboard: a risk score, exposure findings grouped by category, and detail cards for headers, DNS, subdomains and CVEs.
 
-> **Authorized use only.** Scan only domains you own or have written permission to test. The tool asks you to confirm this before every scan.
 
 ---
 
 ## What this tool is — and isn't
+
 
 This is an **exposure assessment / OSINT recon tool**, not a vulnerability scanner.
 
@@ -46,7 +46,7 @@ Domain
     and answer follow-up questions about the same domain
 ```
 
-1. **Input** — you enter a domain and confirm you're authorized to test it, plus a Serper API key (required) and an Anthropic key (optional, for the AI report).
+1. **Input** — you enter a domain and a Serper API key (required) and an Anthropic key (optional, for the AI report).
 2. **Collection** — 22 dork queries run against Serper, all scoped to `site:yourdomain.com`.
 3. **Filtering** — only results on the target domain or its subdomains are kept.
 4. **Validation** — `/api/validate` re-fetches each indexed URL directly (range request, 8s timeout, redirects followed only within scope, private/internal IPs blocked) to confirm it's still live and check its response signature. It also reads the homepage once for security headers, `robots.txt` / `sitemap.xml` / `security.txt`, and software version fingerprints (`Server`/`X-Powered-By` headers, WordPress core assets, Divi theme assets).
@@ -123,12 +123,6 @@ vercel.json        Function timeout config
 - Every finding category shows a **How to fix** note with a CWE reference, next to the existing OWASP Top 10 candidates.
 - **Download JSON** exports findings, remediation, headers, DNS and CVEs. **Save as PDF** uses the browser's print dialog (all sections are expanded automatically).
 
-## Tests
-
-```
-node --test tests/*.test.js
-```
-Unit tests cover the CVSS severity bands, metric selection, KEV/EPSS ordering, the private-IP block, the scope check and the file-signature patterns. They run on every push through GitHub Actions (`.github/workflows/ci.yml`).
 
 ## Disclaimer
 
