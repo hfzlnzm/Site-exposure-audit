@@ -691,11 +691,11 @@ async function ctSubs(d){
   const add = (j, s, f) => j.forEach(c => f(c).forEach(n => { n = n.trim().toLowerCase().replace(/^\*\./,''); if (n === d || n.endsWith('.' + d)) s.add(n); }));
   const s = new Set();
   try {
-    const r = await fetch('https://crt.sh/?q=%25.' + encodeURIComponent(d) + '&output=json', {signal:AbortSignal.timeout(45000)});
+    const r = await fetch('https://crt.sh/?q=%25.' + encodeURIComponent(d) + '&output=json', {signal:AbortSignal.timeout(15000)});
     if (!r.ok) throw new Error('HTTP ' + r.status);
     add(await r.json(), s, c => String(c.name_value).split('\n'));
   } catch(e1) {
-    const r = await fetch('https://api.certspotter.com/v1/issuances?domain=' + encodeURIComponent(d) + '&include_subdomains=true&expand=dns_names', {signal:AbortSignal.timeout(30000)});
+    const r = await fetch('https://api.certspotter.com/v1/issuances?domain=' + encodeURIComponent(d) + '&include_subdomains=true&expand=dns_names', {signal:AbortSignal.timeout(15000)});
     if (!r.ok) throw new Error('crt.sh: ' + e1.message + '; certspotter: HTTP ' + r.status);
     add(await r.json(), s, c => c.dns_names || []);
   }
@@ -714,6 +714,7 @@ async function runValidate(dom, items){
 }
 async function runPassive(dom, res, val){
   const st = add('a', '<div class="stat">Running passive checks (DNS, mail, subdomains)\u2026</div>');
+  try {
   const [spf, dmarc, caa, ns, subs] = await Promise.allSettled([
     doh(dom,'TXT'), doh('_dmarc.' + dom,'TXT'), doh(dom,'CAA'), doh(dom,'NS'), ctSubs(dom)]);
   st.closest('.msg').remove();
@@ -775,6 +776,10 @@ async function runPassive(dom, res, val){
     '<p><strong>Risk score: ' + score + '/100 (' + level + ')</strong></p>' +
     (why.length ? '<ul>' + why.map(w => '<li>' + esc(w) + '</li>').join('') + '</ul>' : '<p>No weighted findings.</p>') +
     '<p><small>Score = sum of weights per category with indexed results plus DNS/mail checks, capped at 100. It is an indicator based on search results and public DNS data, not proof of a vulnerability. Findings are validated by the backend when available.</small></p>');
+  } catch(e) {
+    if (st.isConnected) st.closest('.msg').remove();
+    logMsg('a', '<p><strong>Passive checks failed:</strong> ' + esc(e.message) + '. Dork and CVE results above are still valid.</p>');
+  }
 }
 // ===== FUNGSI UTAMA: AUDIT PENUH =====
 // runFullAudit(): jalankan semua 22 dork melalui Serper, tapis hasil, kemudian:
