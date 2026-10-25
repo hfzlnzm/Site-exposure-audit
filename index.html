@@ -36,9 +36,9 @@
 /* Pembolehubah warna (tema cerah). Tukar warna di sini sahaja, semua tempat lain ikut. */
 /* bg=latar, surf=permukaan kad/input, ink=teks, mut=teks pudar, acc=warna utama (biru), */
 /* line=garisan, warn/warnbg=amaran */
-:root{--bg:#fff;--surf:#f0f4f9;--ink:#1f1f1f;--mut:#5f6368;--acc:#0b57d0;--line:#e1e5ea;--warn:#b3261e;--warnbg:#fce8e6}
+:root{--bg:#fff;--surf:#f0f4f9;--ink:#1f1f1f;--mut:#5f6368;--acc:#0b57d0;--line:#e1e5ea;--warn:#b3261e;--warnbg:#fce8e6;--bad:#c5221f;--badbg:#fce8e6;--hi:#c2410c;--hibg:#ffedd5;--amb:#9a6700;--ambbg:#fff3d1;--good:#1e7e34;--goodbg:#e2f4e6}
 /* Mod gelap: kalau telefon/PC user guna dark mode, warna di atas diganti automatik */
-@media (prefers-color-scheme:dark){:root{--bg:#131314;--surf:#1e1f20;--ink:#e3e3e3;--mut:#9aa0a6;--acc:#a8c7fa;--line:#2d2f31;--warn:#f2b8b5;--warnbg:#3a2224}}
+@media (prefers-color-scheme:dark){:root{--bg:#131314;--surf:#1e1f20;--ink:#e3e3e3;--mut:#9aa0a6;--acc:#a8c7fa;--line:#2d2f31;--warn:#f2b8b5;--warnbg:#3a2224;--bad:#f28b82;--badbg:#3a2224;--hi:#fdba74;--hibg:#3b2614;--amb:#f6c453;--ambbg:#3a3015;--good:#81c995;--goodbg:#16301f}}
 /* Semua elemen kira padding & border dalam lebar/tinggi (lebih mudah susun atur) */
 *{box-sizing:border-box}
 /* Halaman penuh skrin, buang margin lalai */
@@ -157,6 +157,93 @@ button.s:disabled{background:var(--surf);color:var(--mut);box-shadow:none;cursor
 .rItem .rMeta{font-size:11px;color:var(--mut)}
 /* Teks "No audits yet" bila senarai kosong */
 .rEmpty{color:var(--mut);font-size:13px;padding:10px 14px}
+
+/* ===== LAPORAN (DASHBOARD) =====
+   Hasil audit dipaparkan sebagai satu dashboard: skor di atas, kad ringkas ikut topik di bawah.
+   Warna status: s-bad = merah (bahaya), s-hi = oren, s-amb = kuning (perlu perhatian), s-good = hijau, s-neu = kelabu. */
+.a .b{flex:1;min-width:0}
+.s-bad{--k:var(--bad);--kb:var(--badbg)}.s-hi{--k:var(--hi);--kb:var(--hibg)}.s-amb{--k:var(--amb);--kb:var(--ambbg)}.s-good{--k:var(--good);--kb:var(--goodbg)}.s-neu{--k:var(--mut);--kb:var(--line)}
+.sev-critical{--sev:var(--bad)}.sev-high{--sev:var(--hi)}.sev-mod{--sev:var(--amb)}.sev-low{--sev:var(--good)}
+.k-exp{--k:var(--bad)}.k-dns{--k:var(--acc)}.k-hdr{--k:var(--amb)}.k-srf{--k:var(--mut)}
+.rp{display:flex;flex-direction:column;gap:20px;width:100%;font-size:14px;line-height:1.45}
+.rp .sec{display:flex;flex-direction:column;gap:10px}
+.rp h3{margin:0;font-size:15px;font-weight:500}
+.rp .sh{display:flex;align-items:baseline;justify-content:space-between;gap:10px}
+.rp .sh span{color:var(--mut);font-size:12px;text-align:right}
+.rp .mini{font-size:12px;color:var(--mut)}
+.rp .grid{display:grid;grid-template-columns:repeat(auto-fit,minmax(300px,1fr));gap:12px}
+.rp .wide{grid-column:1/-1}
+.card{background:var(--surf);border-radius:16px;padding:14px 16px;display:flex;flex-direction:column;gap:10px;min-width:0}
+/* Kad skor di atas: cincin skor + tahap risiko + bar komposisi */
+.hero{background:var(--surf);border-radius:22px;padding:16px;display:flex;flex-direction:column;gap:14px}
+.hero .top{display:flex;gap:16px;align-items:center}
+.ring{position:relative;width:112px;height:112px;flex:none}
+.ring svg{width:100%;height:100%;transform:rotate(-90deg)}
+.ring .trk{stroke:var(--line)}.ring .val{stroke:var(--sev)}
+.ring .num{position:absolute;inset:0;display:flex;flex-direction:column;align-items:center;justify-content:center;line-height:1}
+.ring .num b{font-size:32px;font-weight:600;color:var(--sev)}
+.ring .num i{font-style:normal;font-size:12px;color:var(--mut);margin-top:3px}
+.hero .ht{min-width:0}
+.hero .lvl{font-size:22px;font-weight:600;color:var(--sev);line-height:1.2}
+.hero .dm{font-size:13px;color:var(--mut);overflow-wrap:anywhere}
+.hero .ht p{margin:8px 0 0;font-size:13px}
+.stack{display:flex;height:10px;border-radius:5px;overflow:hidden;gap:2px}
+.stack i{display:block;background:var(--k);min-width:4px}
+.lg{display:flex;flex-wrap:wrap;gap:4px 14px;font-size:12px;color:var(--mut)}
+.lg i{display:inline-block;width:8px;height:8px;border-radius:50%;margin-right:6px;background:var(--k)}
+/* Empat kotak ringkasan */
+.tiles{display:grid;grid-template-columns:repeat(auto-fit,minmax(72px,1fr));gap:8px}
+.tile{background:var(--surf);border-radius:14px;padding:10px 4px;text-align:center}
+.tile b{display:block;font-size:24px;font-weight:600;line-height:1.1;color:var(--k)}
+.tile.z b{color:var(--mut);font-weight:500}
+.tile span{font-size:12px;color:var(--mut)}
+/* Pil status kecil */
+.pill{display:inline-block;border-radius:999px;padding:2px 9px;font-size:12px;white-space:nowrap;background:var(--kb);color:var(--k)}
+/* Kad kategori dork (boleh buka/tutup) */
+.cat{background:var(--surf);border-radius:14px;color:var(--ink);font-size:14px;overflow:hidden}
+.cat>summary{list-style:none;display:flex;align-items:center;gap:10px;padding:12px 14px;min-height:48px}
+.cat>summary::-webkit-details-marker{display:none}
+.cat .dot,.kr .dt{width:10px;height:10px;border-radius:50%;background:var(--k);flex:none}
+.cat .nm{flex:1;min-width:0}
+.cat .ct{color:var(--mut);font-size:12px}
+.cat .chev{color:var(--mut);transition:transform .15s;font-size:18px;line-height:1}
+.cat[open] .chev{transform:rotate(90deg)}
+.cat .bd{padding:0 14px 12px;display:flex;flex-direction:column}
+.ur{display:flex;flex-direction:column;gap:4px;padding:8px 0;border-top:1px solid var(--line)}
+.ur .l1{display:flex;align-items:center;gap:8px}
+.ur a{flex:1;min-width:0;overflow:hidden;text-overflow:ellipsis;white-space:nowrap;font:12px ui-monospace,Menlo,monospace}
+.cat .mini{margin-top:6px}
+/* Chip kecil (subdomain, laluan, kategori bersih) */
+.chips{display:flex;flex-wrap:wrap;gap:6px}
+.chip{background:var(--bg);border-radius:8px;padding:3px 8px;font:12px ui-monospace,Menlo,monospace;overflow-wrap:anywhere;color:var(--ink)}
+.chip.tx{font-family:inherit;font-size:13px;border-radius:999px;padding:3px 10px}
+.chip.ok{color:var(--good);background:var(--goodbg)}
+.chip.np{color:var(--amb);background:var(--ambbg)}
+/* Baris kunci/nilai (DNS, fail tapak) */
+.kr{display:flex;align-items:center;gap:10px;padding:9px 0;border-top:1px solid var(--line)}
+.kr:first-of-type{border-top:0}
+.kr .k{width:96px;flex:none;color:var(--mut)}
+.kr .v{flex:1;min-width:0;overflow-wrap:anywhere}
+/* Grid security headers */
+.hg{display:grid;grid-template-columns:repeat(2,1fr);gap:6px}
+.hd{display:flex;align-items:center;gap:8px;background:var(--bg);border-radius:10px;padding:8px 10px;font-size:13px;min-width:0;overflow-wrap:anywhere}
+.hd .ic{width:18px;height:18px;border-radius:50%;background:var(--kb);color:var(--k);font-size:11px;display:flex;align-items:center;justify-content:center;flex:none}
+/* Nombor besar subdomain */
+.bigrow{display:flex;align-items:center;gap:12px}
+.big{font-size:36px;font-weight:600;line-height:1}
+details.plain summary{color:var(--acc);font-size:13px;margin:2px 0 8px}
+/* Pecahan skor */
+.wr{padding:7px 0;border-top:1px solid var(--line)}
+.wr:first-of-type{border-top:0}
+.wr .t{display:flex;justify-content:space-between;gap:10px}
+.wr .t b{font-weight:600;font-variant-numeric:tabular-nums}
+.wr .bar{height:4px;border-radius:2px;background:var(--line);margin-top:6px;overflow:hidden}
+.wr .bar i{display:block;height:100%;border-radius:2px;background:var(--k)}
+.wr.z{opacity:.55}
+/* Kotak amaran */
+.ban{background:var(--ambbg);color:var(--amb);border-radius:12px;padding:10px 14px;font-size:13px}
+.foot{display:flex;flex-direction:column;gap:8px;font-size:12px;color:var(--mut)}
+@media (max-width:380px){.ring{width:92px;height:92px}.ring .num b{font-size:26px}.hero .lvl{font-size:19px}}
 </style>
 <!--
    ===== BAHAGIAN 2: HTML (struktur halaman) =====
@@ -712,74 +799,189 @@ async function runValidate(dom, items){
   if (!r.ok) throw new Error('HTTP ' + r.status);
   return r.json();
 }
+// runPassive(): jalankan semakan DNS/e-mel/subdomain, kira skor, dan PULANGKAN data (paparan dibuat oleh renderReport)
 async function runPassive(dom, res, val){
-  const st = add('a', '<div class="stat">Running passive checks (DNS, mail, subdomains)\u2026</div>');
-  try {
   const [spf, dmarc, caa, ns, subs] = await Promise.allSettled([
     doh(dom,'TXT'), doh('_dmarc.' + dom,'TXT'), doh(dom,'CAA'), doh(dom,'NS'), ctSubs(dom)]);
-  st.closest('.msg').remove();
   const ok = x => x.status === 'fulfilled';
-  const rows = [], why = []; let score = 0;
+  // P = semua data laporan. why = senarai punca skor {kind, pts, text}. kind: exp = pendedahan, dns = DNS/e-mel, hdr = header, srf = permukaan serangan
+  const P = {dns:{}, cat:{}, why:[], headers:null, hdrErr:'', files:null, disallow:[], backend:'', subs:null};
+  let score = 0;
+  const pt = (kind, pts, text) => { score += pts; P.why.push({kind, pts, text}); };
   const hitCats = [...new Set(res.filter(r => r.hits.length).map(r => r.cat))];
   const V = val && val.urls ? val.urls : null;
   hitCats.forEach(c => {
     const w = WEIGHTS[c] || 0, urls = res.filter(r => r.cat === c).flatMap(r => r.hits.map(h => h.url));
-    if (!V) { const h = Math.round(w / 2); score += h; why.push('+' + h + ' ' + c + ' indexed (not validated)'); return; }
+    if (!V) { pt('exp', Math.round(w / 2), c + ' indexed (not validated)'); P.cat[c] = {state:'indexed'}; return; }
     const live = urls.filter(u => V[u] && V[u].status >= 200 && V[u].status < 300);
     const sig = live.some(u => V[u].sig);
     const guarded = urls.some(u => V[u] && (V[u].status === 401 || V[u].status === 403));
-    if (live.length) { score += w; why.push('+' + w + ' ' + c + ' CONFIRMED live' + (sig ? ' (sensitive signature)' : '')); }
-    else if (guarded) { const h = Math.round(w / 2); score += h; why.push('+' + h + ' ' + c + ' exists but access-controlled'); }
-    else why.push('+0 ' + c + ' indexed but no longer reachable');
+    if (live.length) { pt('exp', w, c + ' confirmed live' + (sig ? ' (sensitive signature)' : '')); P.cat[c] = {state:'live', sig}; }
+    else if (guarded) { pt('exp', Math.round(w / 2), c + ' exists but access-controlled'); P.cat[c] = {state:'guarded'}; }
+    else { pt('exp', 0, c + ' indexed but no longer reachable'); P.cat[c] = {state:'gone'}; }
   });
   if (ok(spf)) {
     const has = spf.value.some(t => /^v=spf1/i.test(t));
-    rows.push('SPF: ' + (has ? 'present' : '<strong>missing</strong>'));
-    if (!has) { score += 8; why.push('+8 no SPF record'); }
-  } else rows.push('SPF: lookup failed');
+    P.dns.spf = has ? {s:'good', t:'Present'} : {s:'bad', t:'Missing'};
+    if (!has) pt('dns', 8, 'No SPF record');
+  } else P.dns.spf = {s:'neu', t:'Lookup failed'};
   if (ok(dmarc)) {
     const rec = dmarc.value.find(t => /^v=DMARC1/i.test(t));
     const pol = rec && (rec.match(/p=(\w+)/i) || [])[1];
-    rows.push('DMARC: ' + (rec ? 'present (policy ' + esc(pol || '?') + ')' : '<strong>missing</strong>'));
-    if (!rec) { score += 8; why.push('+8 no DMARC record'); }
-    else if (/^none$/i.test(pol || '')) { score += 4; why.push('+4 DMARC policy is none'); }
-  } else rows.push('DMARC: lookup failed');
+    if (!rec) { P.dns.dmarc = {s:'bad', t:'Missing'}; pt('dns', 8, 'No DMARC record'); }
+    else if (/^none$/i.test(pol || '')) { P.dns.dmarc = {s:'amb', t:'Present, policy none (monitor only)'}; pt('dns', 4, 'DMARC policy is none'); }
+    else P.dns.dmarc = {s:'good', t:'Present, policy ' + (pol || '?')};
+  } else P.dns.dmarc = {s:'neu', t:'Lookup failed'};
   if (ok(caa)) {
-    rows.push('CAA: ' + (caa.value.length ? 'present' : '<strong>missing</strong>'));
-    if (!caa.value.length) { score += 3; why.push('+3 no CAA record'); }
-  } else rows.push('CAA: lookup failed');
-  rows.push('Name servers: ' + (ok(ns) && ns.value.length ? ns.value.map(esc).join(', ') : 'unknown'));
+    P.dns.caa = caa.value.length ? {s:'good', t:'Present'} : {s:'amb', t:'Missing'};
+    if (!caa.value.length) pt('dns', 3, 'No CAA record');
+  } else P.dns.caa = {s:'neu', t:'Lookup failed'};
+  P.dns.ns = ok(ns) ? ns.value : [];
   if (val && val.site) {
-    const st = val.site, miss = Object.entries(st.headers || {}).filter(([, v]) => v === 'missing').map(([k]) => k);
-    if (st.error) rows.push('Security headers: unavailable (' + esc(st.error) + ')');
+    const st = val.site;
+    if (st.error) P.hdrErr = st.error;
     else {
-      rows.push('Security headers: ' + (miss.length ? '<strong>' + miss.length + ' missing</strong> (' + miss.map(esc).join(', ') + ')' : 'all present'));
-      ['strict-transport-security','content-security-policy'].forEach(h => { if (miss.includes(h)) { score += 4; why.push('+4 missing ' + h); } });
-      if (miss.includes('x-frame-options')) { score += 2; why.push('+2 missing x-frame-options'); }
+      P.headers = st.headers || {};
+      const miss = Object.entries(P.headers).filter(([, v]) => v === 'missing').map(([k]) => k);
+      ['strict-transport-security','content-security-policy'].forEach(h => { if (miss.includes(h)) pt('hdr', 4, 'Missing ' + h); });
+      if (miss.includes('x-frame-options')) pt('hdr', 2, 'Missing x-frame-options');
     }
-    const f = st.files || {};
-    rows.push('robots.txt: ' + esc(String(f['/robots.txt'])) + ', sitemap.xml: ' + esc(String(f['/sitemap.xml'])) + ', security.txt: ' + esc(String(f['/.well-known/security.txt'])));
-    if ((st.disallow || []).length) rows.push('robots.txt Disallow paths: ' + st.disallow.slice(0,10).map(esc).join(', '));
-  } else rows.push('Backend validation: ' + (val && val.error ? 'unavailable (' + esc(val.error) + ')' : 'not run') + '. Dork findings counted at half weight.');
-  let subHtml;
+    P.files = st.files || {}; P.disallow = (st.disallow || []).slice(0, 10);
+  } else P.backend = 'Backend validation ' + (val && val.error ? 'unavailable (' + val.error + ')' : 'not run') + '. Dork findings are counted at half weight and are not confirmed live.';
   if (ok(subs)) {
     const list = subs.value.filter(x => x !== dom);
-    if (list.length > 20) { score += 3; why.push('+3 large attack surface (' + list.length + ' subdomains)'); }
     const dev = list.filter(x => /(^|[.-])(dev|test|staging|stage|beta|admin|internal|old|backup)([.-]|$)/.test(x));
-    if (dev.length) { score += 5; why.push('+5 non-production subdomains visible'); }
-    subHtml = '<p><strong>Subdomains from certificate logs:</strong> ' + list.length + ' found' + (dev.length ? ' (' + dev.length + ' look non-production)' : '') + '</p>' +
-      (list.length ? '<details><summary>Show list</summary><ul>' + list.slice(0,60).map(x => '<li>' + esc(x) + '</li>').join('') + '</ul></details>' : '');
-  } else subHtml = '<p><strong>Subdomains:</strong> lookup failed (' + esc(subs.reason.message) + '). crt.sh may be busy or blocked by the browser; try again later.</p>';
-  score = Math.min(100, score);
-  const level = score >= 70 ? 'Critical' : score >= 40 ? 'High' : score >= 20 ? 'Moderate' : 'Low';
-  logMsg('a', '<p><strong>Passive checks</strong></p><ul>' + rows.map(r => '<li>' + r + '</li>').join('') + '</ul>' + subHtml +
-    '<p><strong>Risk score: ' + score + '/100 (' + level + ')</strong></p>' +
-    (why.length ? '<ul>' + why.map(w => '<li>' + esc(w) + '</li>').join('') + '</ul>' : '<p>No weighted findings.</p>') +
-    '<p><small>Score = sum of weights per category with indexed results plus DNS/mail checks, capped at 100. It is an indicator based on search results and public DNS data, not proof of a vulnerability. Findings are validated by the backend when available.</small></p>');
-  } catch(e) {
-    if (st.isConnected) st.closest('.msg').remove();
-    logMsg('a', '<p><strong>Passive checks failed:</strong> ' + esc(e.message) + '. Dork and CVE results above are still valid.</p>');
+    if (list.length > 20) pt('srf', 3, 'Large attack surface (' + list.length + ' subdomains)');
+    if (dev.length) pt('srf', 5, 'Non-production subdomains visible');
+    P.subs = {ok:true, list, dev};
+  } else P.subs = {ok:false, err:subs.reason.message};
+  P.score = Math.min(100, score);
+  P.level = P.score >= 70 ? 'Critical' : P.score >= 40 ? 'High' : P.score >= 20 ? 'Moderate' : 'Low';
+  return P;
+}
+
+// ===== PAPARAN LAPORAN (DASHBOARD) =====
+const HDR_SHORT = {'strict-transport-security':'HSTS','content-security-policy':'CSP','x-frame-options':'X-Frame-Options','x-content-type-options':'X-Content-Type-Options','referrer-policy':'Referrer-Policy','permissions-policy':'Permissions-Policy'};
+const KIND_LABEL = {exp:'Exposures', dns:'DNS & mail', hdr:'Headers', srf:'Attack surface'};
+const LVL_CLASS = {Critical:'sev-critical', High:'sev-high', Moderate:'sev-mod', Low:'sev-low'};
+// state dork -> [warna, label]
+const CAT_STATE = {live:['bad','Live'], guarded:['amb','Access-controlled'], indexed:['hi','Indexed'], gone:['neu','Not reachable']};
+const STATE_ORDER = ['live','guarded','indexed','gone'];
+const pill = (k, t) => '<span class="pill s-' + k + '">' + esc(t) + '</span>';
+// ringHtml(): cincin skor (SVG). Panjang lengkok = skor / 100
+function ringHtml(score){
+  const C = 2 * Math.PI * 50;
+  return '<div class="ring"><svg viewBox="0 0 120 120" aria-hidden="true"><circle class="trk" cx="60" cy="60" r="50" fill="none" stroke-width="10"/><circle class="val" cx="60" cy="60" r="50" fill="none" stroke-width="10" stroke-linecap="' + (score ? 'round' : 'butt') + '" stroke-dasharray="' + (score / 100 * C).toFixed(1) + ' ' + C.toFixed(1) + '"/></svg><div class="num"><b>' + score + '</b><i>of 100</i></div></div>';
+}
+// urlPill(): kod status HTTP bagi satu URL yang disahkan backend
+function urlPill(v){
+  if (!v) return '';
+  if (v.error) return pill('neu', v.error === 'timeout' ? 'timeout' : 'error');
+  const s = v.status;
+  return pill(s >= 200 && s < 300 ? 'bad' : (s === 401 || s === 403) ? 'amb' : 'neu', String(s));
+}
+function catCard(c, items, st, V){
+  const [k, label] = CAT_STATE[st] || CAT_STATE.indexed;
+  const om = OWASP_MAP[c] || {candidates:[], note:''};
+  const rows = items.map(h => {
+    const v = V && V[h.url];
+    return '<div class="ur"><div class="l1"><a href="' + esc(h.url) + '" target="_blank" rel="noopener noreferrer" title="' + esc(h.title) + '">' + esc(h.url.replace(/^https?:\/\//, '')) + '</a>' + urlPill(v) + '</div>' +
+      (v && v.sig ? '<div>' + pill('bad', 'sensitive signature: ' + v.sig) + '</div>' : '') + '</div>';
+  }).join('');
+  return '<details class="cat s-' + k + '"><summary><span class="dot"></span><span class="nm">' + esc(c) + '</span><span class="ct">' + items.length + '</span>' + pill(k, label) + '<span class="chev">\u203a</span></summary><div class="bd">' + rows +
+    '<div class="mini">OWASP Top 10:2025 candidates: ' + (om.candidates.length ? om.candidates.map(esc).join('; ') : 'none (informational only)') + '.' + (om.note ? ' ' + esc(om.note) : '') + '</div></div></details>';
+}
+const kvRow = (k, v, s) => '<div class="kr s-' + s + '"><span class="dt"></span><span class="k">' + esc(k) + '</span><span class="v">' + v + '</span></div>';
+const card = (title, meta, body, cls) => '<div class="card' + (cls ? ' ' + cls : '') + '"><div class="sh"><h3>' + esc(title) + '</h3>' + (meta ? '<span>' + esc(meta) + '</span>' : '') + '</div>' + body + '</div>';
+
+// renderReport(): bina SATU dashboard daripada semua data audit
+function renderReport(x){
+  const {dom, res, groups, techs, cveHtml, val, P, perr, failed} = x;
+  const V = val && val.urls ? val.urls : null;
+  const hits = groups.filter(g => g.items.length), clear = groups.filter(g => !g.items.length);
+  const stOf = g => ((P && P.cat[g.cat]) || {}).state || 'indexed';
+  const cnt = {live:0, guarded:0, indexed:0, gone:0};
+  hits.forEach(g => cnt[stOf(g)]++);
+  let out = '<div class="rp">';
+
+  // 1) Kad skor
+  if (P) {
+    const missH = P.headers ? Object.values(P.headers).filter(v => v === 'missing').length : 0;
+    const dnsGaps = ['spf','dmarc','caa'].filter(k => P.dns[k] && (P.dns[k].s === 'bad' || P.dns[k].s === 'amb')).length;
+    const parts = [];
+    if (cnt.live) parts.push(cnt.live + ' exposure ' + (cnt.live === 1 ? 'category' : 'categories') + ' confirmed live');
+    if (cnt.indexed) parts.push(cnt.indexed + ' indexed, not validated');
+    if (cnt.guarded) parts.push(cnt.guarded + ' behind access control');
+    if (missH) parts.push(missH + ' security ' + (missH === 1 ? 'header' : 'headers') + ' missing');
+    if (dnsGaps) parts.push(dnsGaps + ' DNS/mail ' + (dnsGaps === 1 ? 'gap' : 'gaps'));
+    const tot = {}; P.why.forEach(w => tot[w.kind] = (tot[w.kind] || 0) + w.pts);
+    const sum = Object.values(tot).reduce((a, b) => a + b, 0), kinds = Object.keys(KIND_LABEL).filter(k => tot[k]);
+    const stack = sum ? '<div class="stack" role="img" aria-label="Score composition">' + kinds.map(k => '<i class="k-' + k + '" style="width:' + (tot[k] / sum * 100).toFixed(1) + '%" title="' + esc(KIND_LABEL[k]) + ' ' + tot[k] + '"></i>').join('') + '</div>' +
+      '<div class="lg">' + kinds.map(k => '<span><i class="k-' + k + '"></i>' + esc(KIND_LABEL[k]) + ' ' + tot[k] + '</span>').join('') + '</div>' : '';
+    out += '<section class="hero ' + LVL_CLASS[P.level] + '"><div class="top">' + ringHtml(P.score) + '<div class="ht"><div class="lvl">' + esc(P.level) + ' risk</div><div class="dm">' + esc(dom) + '</div><p>' + esc(parts.length ? parts.join(', ') + '.' : 'No weighted findings.') + '</p></div></div>' + stack + '</section>';
+  } else out += '<div class="ban">Passive checks failed: ' + esc(perr || 'unknown error') + '. Dork and CVE results below are still valid, but no risk score was calculated.</div>';
+
+  // 2) Kotak ringkasan
+  const tiles = [['live','Live','bad'], ['guarded','Guarded','amb'], ['indexed','Indexed','hi'], ['gone','Unreachable','neu']].filter(t => t[0] !== 'indexed' || cnt.indexed)
+    .map(t => '<div class="tile s-' + t[2] + (cnt[t[0]] ? '' : ' z') + '"><b>' + cnt[t[0]] + '</b><span>' + t[1] + '</span></div>');
+  tiles.push('<div class="tile s-good' + (clear.length ? '' : ' z') + '"><b>' + clear.length + '</b><span>Clear</span></div>');
+  out += '<div class="tiles">' + tiles.join('') + '</div>';
+
+  // 3) Pendedahan (kad kategori)
+  const sorted = hits.slice().sort((a, b) => STATE_ORDER.indexOf(stOf(a)) - STATE_ORDER.indexOf(stOf(b)) || (WEIGHTS[b.cat] || 0) - (WEIGHTS[a.cat] || 0));
+  out += '<div class="sec"><div class="sh"><h3>Exposure findings</h3><span>' + hits.length + ' of ' + groups.length + ' checks found indexed items</span></div>' +
+    (P && P.backend ? '<div class="ban">' + esc(P.backend) + '</div>' : (!P && val && val.error ? '<div class="ban">Backend validation unavailable (' + esc(val.error) + ').</div>' : '')) +
+    (sorted.length ? sorted.map(g => catCard(g.cat, g.items, stOf(g), V)).join('') : '<div class="card"><span>Nothing sensitive was found in search results.</span></div>') +
+    (clear.length ? '<div class="mini">Nothing indexed for:</div><div class="chips">' + clear.map(g => '<span class="chip tx ok">\u2713 ' + esc(g.cat) + '</span>').join('') + '</div>' : '') +
+    (failed ? '<div class="mini">' + failed + ' quer' + (failed === 1 ? 'y' : 'ies') + ' failed.</div>' : '') + '</div>';
+
+  // 4) Kad topik (grid macam webcheck)
+  const cards = [];
+  if (P) {
+    // Security headers
+    let hb, hm = '';
+    if (P.hdrErr) hb = '<div class="mini">Could not read headers (' + esc(P.hdrErr) + ').</div>';
+    else if (P.headers) {
+      const e = Object.entries(P.headers); hm = e.filter(([, v]) => v === 'present').length + ' of ' + e.length + ' present';
+      hb = '<div class="hg">' + e.map(([k, v]) => '<div class="hd s-' + (v === 'present' ? 'good' : 'bad') + '" title="' + esc(k) + '"><span class="ic">' + (v === 'present' ? '\u2713' : '\u2715') + '</span>' + esc(HDR_SHORT[k] || k) + '</div>').join('') + '</div>';
+    } else hb = '<div class="mini">Not checked (backend validation unavailable).</div>';
+    cards.push(card('Security headers', hm, hb));
+    // DNS & e-mel
+    cards.push(card('DNS & email', '', kvRow('SPF', esc(P.dns.spf.t), P.dns.spf.s) + kvRow('DMARC', esc(P.dns.dmarc.t), P.dns.dmarc.s) + kvRow('CAA', esc(P.dns.caa.t), P.dns.caa.s) +
+      kvRow('Name servers', P.dns.ns.length ? '<div class="chips">' + P.dns.ns.map(n => '<span class="chip">' + esc(n.replace(/\.$/, '')) + '</span>').join('') + '</div>' : 'Unknown', 'neu')));
+    // Fail tapak
+    if (P.files) {
+      const fr = (p, bad) => { const c = P.files[p]; return kvRow(p.replace('/.well-known', '.well-known'), c === 200 ? '200 OK' : c === 'error' || c == null ? 'No response' : esc(String(c)) + ' not found', c === 200 ? 'good' : bad); };
+      cards.push(card('Site files', '', fr('/robots.txt', 'neu') + fr('/sitemap.xml', 'neu') + fr('/.well-known/security.txt', 'amb') +
+        (P.disallow.length ? '<div class="mini">Disallowed in robots.txt</div><div class="chips">' + P.disallow.map(p => '<span class="chip">' + esc(p) + '</span>').join('') + '</div>' : '')));
+    }
+    // Subdomain
+    let sb, sm = '';
+    if (!P.subs.ok) sb = '<div class="mini">Lookup failed (' + esc(P.subs.err) + '). crt.sh may be busy or blocked by the browser; try again later.</div>';
+    else {
+      const L = P.subs.list, D = P.subs.dev; sm = 'from certificate logs';
+      sb = '<div class="bigrow"><span class="big">' + L.length + '</span><span class="mini">' + (D.length ? '<strong>' + D.length + ' look non-production</strong>' : 'none look non-production') + '</span></div>' +
+        (D.length ? '<div class="chips">' + D.slice(0, 12).map(n => '<span class="chip np">' + esc(n) + '</span>').join('') + '</div>' : '') +
+        (L.length ? '<details class="plain"><summary>Show all' + (L.length > 60 ? ' (first 60)' : '') + '</summary><div class="chips">' + L.slice(0, 60).map(n => '<span class="chip">' + esc(n) + '</span>').join('') + '</div></details>' : '');
+    }
+    cards.push(card('Subdomains', sm, sb));
   }
+  // Teknologi & CVE
+  const techChips = techs.length ? '<div class="chips">' + techs.map(f => '<span class="chip">' + esc(f.t.name + (f.versions.size ? ' ' + [...f.versions].join(', ') : '')) + '</span>').join('') + '</div>' : '';
+  cards.push(card('Technology & CVE', 'matched on product + version only', techChips + cveHtml.replace(/^<p><strong>CVE \/ CVSS[^<]*<\/strong><\/p>/, ''), 'wide'));
+  out += '<div class="sec"><h3>Details</h3><div class="grid">' + cards.join('') + '</div></div>';
+
+  // 5) Pecahan skor
+  if (P && P.why.length) {
+    out += '<div class="sec"><div class="sh"><h3>How the score is built</h3><span>capped at 100</span></div><div class="card">' +
+      P.why.slice().sort((a, b) => b.pts - a.pts).map(w => '<div class="wr k-' + w.kind + (w.pts ? '' : ' z') + '"><div class="t"><span>' + esc(w.text) + '</span><b>+' + w.pts + '</b></div><div class="bar"><i style="width:' + Math.min(100, w.pts / 25 * 100) + '%"></i></div></div>').join('') + '</div></div>';
+  }
+
+  // 6) Kaki: senarai query + penafian
+  out += '<div class="foot"><details><summary>' + res.length + ' dork queries run (tap to view)</summary><ul>' + res.map(r =>
+    '<li><code>' + esc(r.q) + '</code> \u2192 ' + (r.err ? 'error: ' + esc(r.err) : r.hits.length + ' result' + (r.hits.length === 1 ? '' : 's')) + '</li>').join('') + '</ul></details>' +
+    '<span>Score is an indicator based on search results and public DNS data, not proof of a vulnerability. OWASP categories are candidates assigned by the tool. Findings are validated by the backend when available.</span></div>';
+  return out + '</div>';
 }
 // ===== FUNGSI UTAMA: AUDIT PENUH =====
 // runFullAudit(): jalankan semua 22 dork melalui Serper, tapis hasil, kemudian:
@@ -809,45 +1011,41 @@ async function runFullAudit(){
     } catch(e) { return {cat, q, hits:[], err:e.message}; }
     finally { n++; status(); }
   }));
-  // Semua query siap: buang mesej status "Running..."
-  out.closest('.msg').remove();
-  // failed = bilangan query yang gagal
+  // Semua query siap. setStat() menukar teks status sementara (satu mesej sahaja) sehingga laporan siap
+  const setStat = t => out.innerHTML = '<div class="stat">' + esc(t) + '</div>';
+  const dropStat = () => { const m = out.closest('.msg'); if (m) m.remove(); };
   const failed = res.filter(r => r.err).length;
-  // Papar dropdown senarai semua query yang dijalankan beserta bilangan hasil atau ralat
-  logMsg('a', '<details><summary>' + res.length + ' dork queries run (tap to view)</summary><ul>' + res.map(r =>
-    '<li><code>' + esc(r.q) + '</code> \u2192 ' + (r.err ? 'error: ' + esc(r.err) : r.hits.length + ' result' + (r.hits.length===1?'':'s')) + '</li>').join('') + '</ul></details>');
   // Kalau SEMUA query gagal: papar sebab (key salah / kredit habis / disekat browser CORS), kemudian berhenti
   if (failed === res.length) {
+    dropStat();
     const e0 = res[0].err || '';
     logMsg('a', '<p>All searches failed (' + esc(e0) + ').</p><p>' + (/HTTP 40[13]/.test(e0) ? 'Serper rejected the key. Re-check it on serper.dev.' : /HTTP 4(29|00)/.test(e0) ? 'Serper says you are out of credits or rate limited.' : 'The browser blocked the request (CORS, or the page is running inside Claude\u2019s preview). Open this file directly in your browser or on GitHub Pages; if it still fails, Serper needs a small proxy.') + '</p>');
     busy = false; setLocked(limitUntil); saveSession(); return;
   }
-  // Senarai nama kategori (tanpa pendua)
+  // groups = hasil dikumpul ikut kategori (URL tanpa pendua). allItems = semua URL
   const cats = [...new Set(res.map(r => r.cat))];
-  // LAPORAN TERUS (tanpa AI): OWASP dari OWASP_MAP, teknologi dikesan dari URL/tajuk/snippet, CVE+CVSS dari NVD hanya jika versi diketahui
-  let hit = 0; const allItems = [];
-  const html = cats.map(c => {
-    const items = []; res.filter(r => r.cat===c).forEach(r => r.hits.forEach(h => { if (!items.some(i => i.url===h.url)) items.push(h); }));
-    if (items.length) { hit++; allItems.push(...items); }
-    const om = OWASP_MAP[c] || {candidates:[], note:''};
-    const owaspLine = items.length ? '<p><strong>OWASP Top 10:2025:</strong> ' + (om.candidates.length ? om.candidates.map(esc).join('; ') : 'No mapping (informational only)') + '<br><small>' + esc(om.note) + '</small></p>' : '';
-    return '<p><strong>' + esc(c) + '</strong></p>' + owaspLine + (items.length ? '<ul>' + items.map(h => '<li><a href="' + esc(h.url) + '" target="_blank" rel="noopener noreferrer">' + esc(h.title) + '</a></li>').join('') + '</ul>' : '<p>Nothing indexed.</p>');
-  }).join('') + '<p><strong>' + hit + ' of ' + cats.length + ' checks found indexed items.</strong> These are indicators from search results, not confirmed vulnerabilities. OWASP categories are candidates assigned by the tool.</p>' + (failed ? '<p>' + failed + ' quer' + (failed===1?'y':'ies') + ' failed.</p>' : '');
-  logMsg('a', html);
-  // ----- Kesan teknologi + versi daripada hasil Serper -----
-  const techs = detectTech(allItems);
-  if (techs.length) {
-    const st = add('a', '<div class="stat">Looking up CVE / CVSS in NVD\u2026</div>');
-    const cveHtml = await buildCveReport(techs);
-    st.closest('.msg').remove();
-    logMsg('a', cveHtml);
-  } else {
-    logMsg('a', '<p><strong>CVE / CVSS</strong></p><p>No product or version could be identified from the results, so no CVE matching was done.</p>');
+  const groups = cats.map(c => { const items = []; res.filter(r => r.cat === c).forEach(r => r.hits.forEach(h => { if (!items.some(i => i.url === h.url)) items.push(h); })); return {cat:c, items}; });
+  const allItems = groups.flatMap(g => g.items);
+  try {
+    // Kesan teknologi + versi, kemudian CVE/CVSS dari NVD (hanya jika versi diketahui)
+    const techs = detectTech(allItems);
+    let cveHtml;
+    if (techs.length) { setStat('Looking up CVE / CVSS in NVD\u2026'); cveHtml = await buildCveReport(techs); }
+    else cveHtml = '<p>No product or version could be identified from the results, so no CVE matching was done.</p>';
+    // Pengesahan melalui backend
+    setStat('Validating findings\u2026');
+    let val = null;
+    try { val = await runValidate(dom, allItems); } catch(e) { val = {error: e.message}; }
+    // Semakan pasif + skor
+    setStat('Running passive checks (DNS, mail, subdomains)\u2026');
+    let P = null, perr = '';
+    try { P = await runPassive(dom, res, val); } catch(e) { perr = e.message; }
+    dropStat();
+    logMsg('a', renderReport({dom, res, groups, techs, cveHtml, val, P, perr, failed}));
+  } catch(e) {
+    dropStat();
+    logMsg('a', '<p>The report could not be built: ' + esc(e.message) + '.</p>');
   }
-  let val = null;
-  try { const vs = add('a', '<div class="stat">Validating findings\u2026</div>'); val = await runValidate(dom, allItems); vs.closest('.msg').remove(); }
-  catch(e) { val = {error: e.message}; document.querySelectorAll('.stat').forEach(x => x.closest('.msg') && x.closest('.msg').remove()); }
-  await runPassive(dom, res, val);
   busy = false; setLocked(limitUntil); saveSession();
 }
 // ===== PANGGIL AI (CLAUDE) =====
