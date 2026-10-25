@@ -29,8 +29,20 @@ function shape(v) {
   const c = v.cve, s = pickCvss(c), d = ((c.descriptions || []).find(x => x.lang === 'en') || {}).value || '';
   return { id: c.id, score: s ? s.score : null, sev: s ? sevOf(s.score) : 'N/A', ver: s ? s.ver : '', vector: s ? s.vector : '', kev: !!c.cisaExploitAdd, published: c.published || '', desc: d.slice(0, 220) };
 }
-// Susun: CISA KEV dahulu, kemudian skor tertinggi, kemudian paling baru
-const rank = (a, b) => (b.kev - a.kev) || ((b.score || 0) - (a.score || 0)) || String(b.published).localeCompare(String(a.published));
+// Susun: CISA KEV dahulu, kemudian EPSS (kebarangkalian dieksploitasi), kemudian CVSS, kemudian paling baru
+const rank = (a, b) => (b.kev - a.kev) || ((b.epss ?? -1) - (a.epss ?? -1)) || ((b.score || 0) - (a.score || 0)) || String(b.published).localeCompare(String(a.published));
+
+// EPSS (FIRST.org, percuma tanpa key): kebarangkalian CVE dieksploitasi dalam 30 hari. Gagal -> abaikan, jangan patahkan carian.
+async function epss(ids) {
+  const out = {};
+  for (let i = 0; i < ids.length; i += 50) {
+    try {
+      const r = await fetch('https://api.first.org/data/v1/epss?cve=' + ids.slice(i, i + 50).join(','), { signal: AbortSignal.timeout(8000) });
+      if (r.ok) for (const x of (await r.json()).data || []) out[x.cve] = { epss: +x.epss, pct: +x.percentile };
+    } catch (_) { /* EPSS pilihan */ }
+  }
+  return out;
+}
 
 module.exports = async (req, res) => {
   res.setHeader('Access-Control-Allow-Origin', '*');
@@ -54,7 +66,11 @@ module.exports = async (req, res) => {
       counts.high = high.totalResults; partial = partial || high.totalResults > 100;
       items.push(...(high.vulnerabilities || []).map(shape));
     }
+    const ep = await epss([...new Set(items.map(i => i.id))]);
+    items.forEach(i => { const e = ep[i.id]; if (e) { i.epss = e.epss; i.epssPct = e.pct; } });
     items = items.sort(rank).slice(0, 5);
     res.status(200).json({ name, version: version || null, confirmed: !!version, counts, items, partial, keyRejected: ctx.keyRejected });
   } catch (e) { res.status(502).json({ error: e.message }); }
 };
+
+module.exports._t = { sevOf, pickCvss, rank, shape }; // untuk ujian automatik

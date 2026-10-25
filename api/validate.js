@@ -98,3 +98,5 @@ module.exports = async (req, res) => {
   const map = {}; list.forEach((u, i) => map[u] = results[i]);
   res.status(200).json({ site: s, urls: map });
 };
+
+module.exports._t = { priv, inScope, SIGS }; // untuk ujian automatik
