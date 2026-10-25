@@ -57,7 +57,8 @@ async function fingerprint(r) {
   let html = ''; try { html = (await r.text()).slice(0, 300000); } catch { }
   const gen = html.match(/<meta[^>]+name=["']generator["'][^>]+content=["']WordPress (\d+\.\d+(?:\.\d+)?)/i) || html.match(/<meta[^>]+content=["']WordPress (\d+\.\d+(?:\.\d+)?)["'][^>]*name=["']generator/i);
   if (gen) add('WordPress', 'wordpress:wordpress', gen[1], 'meta generator');
-  else if ((m = html.match(/wp-includes\/[^"'\s]*?\?ver=(\d+\.\d+(?:\.\d+)?)/i))) add('WordPress', 'wordpress:wordpress', m[1], 'wp-includes asset');
+  // Hanya aset TERAS WordPress yang membawa versi WordPress. Fail lain dalam wp-includes (cth jQuery) ada versi sendiri.
+  else if ((m = html.match(/wp-includes\/(?:css\/(?:dist\/block-library\/style|classic-themes|dashicons)|js\/(?:wp-emoji-release|wp-embed))[^"'\s]*?\?ver=(\d+\.\d+(?:\.\d+)?)/i))) add('WordPress', 'wordpress:wordpress', m[1], 'WordPress core asset');
   if ((m = html.match(/themes\/Divi\/[^"'\s]*?\?ver=(\d+\.\d+(?:\.\d+)?)/i))) add('Divi theme', 'elegantthemes:divi', m[1], 'theme asset');
   return out;
 }

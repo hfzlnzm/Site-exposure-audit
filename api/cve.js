@@ -5,10 +5,13 @@ const KEY = process.env.NVD_API_KEY || '';
 const NVD = 'https://services.nvd.nist.gov/rest/json/cves/2.0?';
 const sleep = ms => new Promise(r => setTimeout(r, ms));
 
-async function nvd(params) {
-  const r = await fetch(NVD + new URLSearchParams(params), { headers: KEY ? { apiKey: KEY } : {}, signal: AbortSignal.timeout(25000) });
-  if (r.status === 403 || r.status === 429) throw new Error('NVD rate limit reached. Set NVD_API_KEY on the server or try again in a minute');
-  if (!r.ok) throw new Error('NVD HTTP ' + r.status);
+async function nvd(params, ctx) {
+  const r = await fetch(NVD + new URLSearchParams(params), { headers: ctx.key ? { apiKey: ctx.key } : {}, signal: AbortSignal.timeout(25000) });
+  const msg = r.headers.get('message') || ''; // NVD letak punca ralat dalam header "message"
+  // Kalau key ditolak NVD, cuba semula tanpa key (lebih perlahan tetapi tetap berfungsi)
+  if (ctx.key && /api ?key/i.test(msg)) { ctx.key = ''; ctx.keyRejected = true; return nvd(params, ctx); }
+  if (r.status === 403 || r.status === 429) throw new Error('NVD rate limit reached. Set a valid NVD_API_KEY on the server or try again in a minute');
+  if (!r.ok) throw new Error('NVD HTTP ' + r.status + (msg ? ': ' + msg : ''));
   return r.json();
 }
 // Pilih metrik CVSS: v4.0 > v3.1 > v3.0 > v2.0 (utamakan sumber "Primary" = NVD)
@@ -38,9 +41,9 @@ module.exports = async (req, res) => {
   const { name = '', cpe = '', version = null } = req.body || {};
   if (!/^[a-z0-9_.-]+:[a-z0-9_.-]+$/.test(cpe)) return res.status(400).json({ error: 'invalid cpe' });
   if (version != null && !/^\d+(\.\d+){0,3}$/.test(String(version))) return res.status(400).json({ error: 'invalid version' });
-  const base = 'cpe:2.3:a:' + cpe + ':' + (version || '*') + ':*:*:*:*:*:*:*:*';
-  const gap = KEY ? 700 : 6500; let n = 0;
-  const q = async p => { if (n++) await sleep(gap); return nvd({ virtualMatchString: base, resultsPerPage: '100', ...p }); };
+  const base = 'cpe:2.3:a:' + cpe + ':' + (version || '*') + ':*:*:*:*:*:*:*'; // 13 medan CPE 2.3
+  const ctx = { key: KEY, keyRejected: false }; let n = 0;
+  const q = async p => { if (n++) await sleep(ctx.key ? 700 : 6500); return nvd({ virtualMatchString: base, resultsPerPage: '100', ...p }, ctx); };
   try {
     const counts = { critical: 0, high: 0 }; let items = [], partial = false;
     const crit = await q({ cvssV3Severity: 'CRITICAL' });
@@ -52,6 +55,6 @@ module.exports = async (req, res) => {
       items.push(...(high.vulnerabilities || []).map(shape));
     }
     items = items.sort(rank).slice(0, 5);
-    res.status(200).json({ name, version: version || null, confirmed: !!version, counts, items, partial });
+    res.status(200).json({ name, version: version || null, confirmed: !!version, counts, items, partial, keyRejected: ctx.keyRejected });
   } catch (e) { res.status(502).json({ error: e.message }); }
 };
