@@ -680,6 +680,67 @@ async function buildCveReport(techs){
   }
   return h + '<p><small>Version taken from indexed URLs may not match the live site; verify before relying on it. This product uses the NVD API but is not endorsed or certified by the NVD.</small></p>';
 }
+// ===== MODUL PASIF + SKOR RISIKO (kod sendiri, tanpa API berbayar) =====
+// 1) DNS dan konfigurasi e-mel (SPF, DMARC, CAA) melalui DNS-over-HTTPS Cloudflare (percuma, CORS dibenarkan)
+// 2) Subdomain daripada log Certificate Transparency (crt.sh)
+// 3) Skor risiko 0-100 berformula berpemberat. Tiada AI terlibat.
+async function doh(name, type){
+  const r = await fetch('https://cloudflare-dns.com/dns-query?name=' + encodeURIComponent(name) + '&type=' + type, {headers:{accept:'application/dns-json'}, signal:AbortSignal.timeout(10000)});
+  if (!r.ok) throw new Error('HTTP ' + r.status);
+  const j = await r.json();
+  return (j.Answer || []).map(a => String(a.data).replace(/^"|"$/g,'').replace(/" "/g,''));
+}
+async function ctSubs(d){
+  const r = await fetch('https://crt.sh/?q=%25.' + encodeURIComponent(d) + '&output=json', {signal:AbortSignal.timeout(20000)});
+  if (!r.ok) throw new Error('HTTP ' + r.status);
+  const j = await r.json(), s = new Set();
+  j.forEach(c => String(c.name_value).split('\n').forEach(n => { n = n.trim().toLowerCase().replace(/^\*\./,''); if (n === d || n.endsWith('.' + d)) s.add(n); }));
+  return [...s].sort();
+}
+// Pemberat markah per kategori dork (dikira sekali sahaja jika ada sekurang-kurangnya satu hasil)
+const WEIGHTS = {'Exposed files':25,'Version control':25,'Sensitive documents':15,'Backup archives':15,'Open directories':10,'Misconfig files':10,'Admin / login panels':8,'Error messages & debug':8,'API & dev environments':8,'Subdomains':2};
+async function runPassive(dom, res){
+  const st = add('a', '<div class="stat">Running passive checks (DNS, mail, subdomains)\u2026</div>');
+  const [spf, dmarc, caa, ns, subs] = await Promise.allSettled([
+    doh(dom,'TXT'), doh('_dmarc.' + dom,'TXT'), doh(dom,'CAA'), doh(dom,'NS'), ctSubs(dom)]);
+  st.closest('.msg').remove();
+  const ok = x => x.status === 'fulfilled';
+  const rows = [], why = []; let score = 0;
+  const hitCats = [...new Set(res.filter(r => r.hits.length).map(r => r.cat))];
+  hitCats.forEach(c => { const w = WEIGHTS[c] || 0; score += w; why.push('+' + w + ' ' + c + ' indexed'); });
+  if (ok(spf)) {
+    const has = spf.value.some(t => /^v=spf1/i.test(t));
+    rows.push('SPF: ' + (has ? 'present' : '<strong>missing</strong>'));
+    if (!has) { score += 8; why.push('+8 no SPF record'); }
+  } else rows.push('SPF: lookup failed');
+  if (ok(dmarc)) {
+    const rec = dmarc.value.find(t => /^v=DMARC1/i.test(t));
+    const pol = rec && (rec.match(/p=(\w+)/i) || [])[1];
+    rows.push('DMARC: ' + (rec ? 'present (policy ' + esc(pol || '?') + ')' : '<strong>missing</strong>'));
+    if (!rec) { score += 8; why.push('+8 no DMARC record'); }
+    else if (/^none$/i.test(pol || '')) { score += 4; why.push('+4 DMARC policy is none'); }
+  } else rows.push('DMARC: lookup failed');
+  if (ok(caa)) {
+    rows.push('CAA: ' + (caa.value.length ? 'present' : '<strong>missing</strong>'));
+    if (!caa.value.length) { score += 3; why.push('+3 no CAA record'); }
+  } else rows.push('CAA: lookup failed');
+  rows.push('Name servers: ' + (ok(ns) && ns.value.length ? ns.value.map(esc).join(', ') : 'unknown'));
+  let subHtml;
+  if (ok(subs)) {
+    const list = subs.value.filter(x => x !== dom);
+    if (list.length > 20) { score += 3; why.push('+3 large attack surface (' + list.length + ' subdomains)'); }
+    const dev = list.filter(x => /(^|[.-])(dev|test|staging|stage|beta|admin|internal|old|backup)([.-]|$)/.test(x));
+    if (dev.length) { score += 5; why.push('+5 non-production subdomains visible'); }
+    subHtml = '<p><strong>Subdomains from certificate logs:</strong> ' + list.length + ' found' + (dev.length ? ' (' + dev.length + ' look non-production)' : '') + '</p>' +
+      (list.length ? '<details><summary>Show list</summary><ul>' + list.slice(0,60).map(x => '<li>' + esc(x) + '</li>').join('') + '</ul></details>' : '');
+  } else subHtml = '<p><strong>Subdomains:</strong> lookup failed (' + esc(subs.reason.message) + '). crt.sh may be busy or blocked by the browser; try again later.</p>';
+  score = Math.min(100, score);
+  const level = score >= 70 ? 'Critical' : score >= 40 ? 'High' : score >= 20 ? 'Moderate' : 'Low';
+  logMsg('a', '<p><strong>Passive checks</strong></p><ul>' + rows.map(r => '<li>' + r + '</li>').join('') + '</ul>' + subHtml +
+    '<p><strong>Risk score: ' + score + '/100 (' + level + ')</strong></p>' +
+    (why.length ? '<ul>' + why.map(w => '<li>' + esc(w) + '</li>').join('') + '</ul>' : '<p>No weighted findings.</p>') +
+    '<p><small>Score = sum of weights per category with indexed results plus DNS/mail checks, capped at 100. It is an indicator based on search results and public DNS data, not proof of a vulnerability. Security headers, live URL validation and robots.txt need a backend (not possible from a static page).</small></p>');
+}
 // ===== FUNGSI UTAMA: AUDIT PENUH =====
 // runFullAudit(): jalankan semua 22 dork melalui Serper, tapis hasil, kemudian:
 //   - ada Anthropic key = minta Claude tulis laporan (callApi)
@@ -743,6 +804,7 @@ async function runFullAudit(){
   } else {
     logMsg('a', '<p><strong>CVE / CVSS</strong></p><p>No product or version could be identified from the results, so no CVE matching was done.</p>');
   }
+  await runPassive(dom, res);
   busy = false; setLocked(limitUntil); saveSession();
 }
 // ===== PANGGIL AI (CLAUDE) =====
