@@ -1,5 +1,6 @@
 // Backend kecil untuk Site Exposure Audit (Vercel serverless, tiada dependency).
-// Fungsi: sahkan URL penemuan masih hidup, semak security headers, baca robots/sitemap/security.txt.
+// Fungsi: sahkan URL penemuan masih hidup, semak security headers, baca robots/sitemap/security.txt,
+// dan baca versi software (header Server/X-Powered-By, meta generator, ?ver= pada aset) daripada SATU request homepage.
 // Hanya URL dalam domain yang diaudit diterima. Kandungan fail TIDAK dipulangkan, hanya jenis signature.
 const dns = require('dns').promises;
 const net = require('net');
@@ -43,12 +44,30 @@ async function probe(url, d) {
   } catch (e) { out.error = e.name === 'TimeoutError' ? 'timeout' : e.message; }
   return out;
 }
+
+// Baca versi software daripada respons homepage (header + sumber HTML). Hanya versi yang benar-benar tertera dipulangkan.
+async function fingerprint(r) {
+  const out = [], seen = new Set();
+  const add = (name, cpe, version, source) => { const k = name + version; if (version && !seen.has(k)) { seen.add(k); out.push({ name, cpe, version, source }); } };
+  const server = r.headers.get('server') || '', xpb = r.headers.get('x-powered-by') || '';
+  let m;
+  if ((m = server.match(/Apache\/(\d+\.\d+\.\d+)/i))) add('Apache HTTP Server', 'apache:http_server', m[1], 'Server header');
+  if ((m = server.match(/nginx\/(\d+\.\d+\.\d+)/i))) add('nginx', 'f5:nginx', m[1], 'Server header');
+  if ((m = xpb.match(/PHP\/(\d+\.\d+\.\d+)/i))) add('PHP', 'php:php', m[1], 'X-Powered-By header');
+  let html = ''; try { html = (await r.text()).slice(0, 300000); } catch { }
+  const gen = html.match(/<meta[^>]+name=["']generator["'][^>]+content=["']WordPress (\d+\.\d+(?:\.\d+)?)/i) || html.match(/<meta[^>]+content=["']WordPress (\d+\.\d+(?:\.\d+)?)["'][^>]*name=["']generator/i);
+  if (gen) add('WordPress', 'wordpress:wordpress', gen[1], 'meta generator');
+  else if ((m = html.match(/wp-includes\/[^"'\s]*?\?ver=(\d+\.\d+(?:\.\d+)?)/i))) add('WordPress', 'wordpress:wordpress', m[1], 'wp-includes asset');
+  if ((m = html.match(/themes\/Divi\/[^"'\s]*?\?ver=(\d+\.\d+(?:\.\d+)?)/i))) add('Divi theme', 'elegantthemes:divi', m[1], 'theme asset');
+  return out;
+}
 async function site(d) {
-  const o = { status: 0, headers: {}, files: {}, disallow: [] };
+  const o = { status: 0, headers: {}, files: {}, disallow: [], tech: [] };
   try {
     const r = await hop('https://' + d + '/', d);
     o.status = r.status;
     HDRS.forEach(h => o.headers[h] = r.headers.get(h) ? 'present' : 'missing');
+    o.tech = await fingerprint(r);
   } catch (e) { o.error = e.message; }
   for (const p of ['/robots.txt', '/sitemap.xml', '/.well-known/security.txt']) {
     try {
