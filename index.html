@@ -20,8 +20,8 @@
    Susunan fail: (1) CSS untuk rupa, (2) HTML untuk struktur,
                  (3) JavaScript untuk logik/fungsi.
   
-   Tool ini PASIF: ia hanya tanya enjin carian, tidak pernah hantar
-   request terus ke website sasaran.
+   Carian dork adalah PASIF (hanya tanya enjin carian). Langkah pengesahan
+   (/api/validate) menghantar sedikit request sebenar ke domain sasaran.
   ==============================================================
 -->
 <html lang="en">
@@ -242,6 +242,8 @@ details.plain summary{color:var(--acc);font-size:13px;margin:2px 0 8px}
 .wr.z{opacity:.55}
 /* Kotak amaran */
 .ban{background:var(--ambbg);color:var(--amb);border-radius:12px;padding:10px 14px;font-size:13px}
+.tb{display:flex;gap:8px;justify-content:flex-end}.tb button{font:inherit;font-size:13px;padding:6px 12px;border:1px solid var(--line);border-radius:8px;background:var(--surf);color:var(--ink);cursor:pointer}
+@media print{.tb{display:none}html,body{height:auto!important;overflow:visible!important}}
 .foot{display:flex;flex-direction:column;gap:8px;font-size:12px;color:var(--mut)}
 @media (max-width:380px){.ring{width:92px;height:92px}.ring .num b{font-size:26px}.hero .lvl{font-size:19px}}
 
@@ -878,6 +880,20 @@ const HDR_SHORT = {'strict-transport-security':'HSTS','content-security-policy':
 const KIND_LABEL = {exp:'Exposures', cve:'CVE (CVSS)', dns:'DNS & mail', hdr:'Headers', srf:'Attack surface'};
 const LVL_CLASS = {Critical:'sev-critical', High:'sev-high', Moderate:'sev-mod', Low:'sev-low'};
 // state dork -> [warna, label]
+// ===== CADANGAN PEMBETULAN per kategori (+ rujukan CWE) =====
+const REMEDY = {
+  'Exposed files': {fix:'Remove the file from the web root, rotate every credential it contained, and block dotfiles and config extensions at the web server.', cwe:'CWE-538'},
+  'Version control': {fix:'Deploy build artifacts instead of the repository, deny access to .git/.svn, and rotate any secrets found in the history.', cwe:'CWE-527'},
+  'Sensitive documents': {fix:'Move internal documents behind authentication, remove public copies, and request de-indexing in Google Search Console.', cwe:'CWE-200'},
+  'Backup archives': {fix:'Store backups outside the web root, delete public copies, and block .bak/.old/.zip/.sql patterns in the server config.', cwe:'CWE-530'},
+  'Open directories': {fix:'Disable directory listing (Options -Indexes on Apache, autoindex off on Nginx) and add an index file.', cwe:'CWE-548'},
+  'Misconfig files': {fix:'Remove phpinfo and server-status pages from production or restrict them to internal IPs.', cwe:'CWE-497'},
+  'Admin / login panels': {fix:'Restrict to a VPN or IP allowlist, enforce MFA and rate limiting, and avoid default admin paths.', cwe:'CWE-284'},
+  'Error messages & debug': {fix:'Turn off debug mode in production, show generic errors to users, and keep details in server-side logs.', cwe:'CWE-209'},
+  'API & dev environments': {fix:'Put staging, dev and API docs behind authentication or a VPN, in addition to noindex.', cwe:'CWE-489'},
+  'Subdomains': {fix:'Decommission unused subdomains and remove dangling DNS records.', cwe:''}
+};
+const fixHtml = c => { const r = REMEDY[c]; return r ? '<div class="mini"><b>How to fix:</b> ' + esc(r.fix) + (r.cwe ? ' <span class="chip">' + esc(r.cwe) + '</span>' : '') + '</div>' : ''; };
 const CAT_STATE = {live:['bad','Live'], guarded:['amb','Access-controlled'], indexed:['hi','Indexed'], gone:['neu','Not reachable']};
 const STATE_ORDER = ['live','guarded','indexed','gone'];
 const pill = (k, t) => '<span class="pill s-' + k + '">' + esc(t) + '</span>';
@@ -901,7 +917,7 @@ function catCard(c, items, st, V){
     return '<div class="ur"><div class="l1"><a href="' + esc(h.url) + '" target="_blank" rel="noopener noreferrer" title="' + esc(h.title) + '">' + esc(h.url.replace(/^https?:\/\//, '')) + '</a>' + urlPill(v) + '</div>' +
       (v && v.sig ? '<div>' + pill('bad', 'sensitive signature: ' + v.sig) + '</div>' : '') + '</div>';
   }).join('');
-  return '<details class="cat s-' + k + '"><summary><span class="dot"></span><span class="nm">' + esc(c) + '</span><span class="ct">' + items.length + '</span>' + pill(k, label) + '<span class="chev">\u203a</span></summary><div class="bd">' + rows +
+  return '<details class="cat s-' + k + '"><summary><span class="dot"></span><span class="nm">' + esc(c) + '</span><span class="ct">' + items.length + '</span>' + pill(k, label) + '<span class="chev">\u203a</span></summary><div class="bd">' + rows + fixHtml(c) +
     '<div class="mini">OWASP Top 10:2025 candidates: ' + (om.candidates.length ? om.candidates.map(esc).join('; ') : 'none (informational only)') + '.' + (om.note ? ' ' + esc(om.note) : '') + '</div></div></details>';
 }
 const kvRow = (k, v, s) => '<div class="kr s-' + s + '"><span class="dt"></span><span class="k">' + esc(k) + '</span><span class="v">' + v + '</span></div>';
@@ -913,7 +929,7 @@ const card = (title, meta, body, cls) => '<div class="card' + (cls ? ' ' + cls :
 const SEV_COLOR = {Critical:'bad', High:'hi', Medium:'amb', Low:'neu'};
 const cvssPill = (score, sev) => score == null ? pill('neu', 'No CVSS') : pill(SEV_COLOR[sev] || 'neu', score.toFixed(1) + ' ' + sev);
 function cveRow(c){
-  return '<div class="cv"><div class="l1"><a href="https://nvd.nist.gov/vuln/detail/' + esc(c.id) + '" target="_blank" rel="noopener noreferrer">' + esc(c.id) + '</a>' + cvssPill(c.score, c.sev) + (c.kev ? pill('bad', 'Exploited (CISA KEV)') : '') + '</div>' +
+  return '<div class="cv"><div class="l1"><a href="https://nvd.nist.gov/vuln/detail/' + esc(c.id) + '" target="_blank" rel="noopener noreferrer">' + esc(c.id) + '</a>' + cvssPill(c.score, c.sev) + (c.kev ? pill('bad', 'Exploited (CISA KEV)') : '') + (c.epss != null ? pill(c.epss >= 0.1 ? 'hi' : 'neu', 'EPSS ' + (c.epss * 100).toFixed(1) + '%') : '') + '</div>' +
     '<div class="mini">' + esc(c.desc) + (c.desc.length >= 220 ? '\u2026' : '') + '</div>' + (c.vector ? '<div class="vec">CVSS v' + esc(c.ver) + ' ' + esc(c.vector) + '</div>' : '') + '</div>';
 }
 function cveCard(cve){
@@ -935,8 +951,21 @@ function cveCard(cve){
     return '<div class="pr"><div class="prh"><div><b>' + title + '</b><div class="mini">' + esc(r.confirmed ? 'version from ' + r.source : r.source) + '</div></div><div class="chips">' + pills + '</div></div>' + inner + '</div>';
   }).join('') + (cve.skipped ? '<div class="mini">' + cve.skipped + ' more product lookup(s) skipped to respect NVD rate limits.</div>' : '');
   return card('Technology & CVE', 'CVSS base scores from NVD', body +
-    '<div class="mini">Scores use CVSS v4.0 when NVD has it, otherwise v3.1, v3.0 or v2.0. Only CVSS v3 High and Critical are fetched. The version is read from the live homepage or indexed URLs and may differ from the real installation.</div>', 'wide');
+    '<div class="mini">Scores use CVSS v4.0 when NVD has it, otherwise v3.1, v3.0 or v2.0. Only CVSS v3 High and Critical are fetched. EPSS (FIRST.org) is the estimated probability of exploitation in the next 30 days; CVEs are ordered CISA KEV first, then EPSS, then CVSS. The version is read from the live homepage or indexed URLs and may differ from the real installation.</div>', 'wide');
 }
+
+// exportJson(): muat turun ringkasan audit (temuan + cadangan pembetulan) sebagai JSON
+function exportJson(){
+  const x = window.LAST_REPORT; if (!x) return;
+  const {dom, groups, cve, P} = x, stOf = g => ((P && P.cat[g.cat]) || {}).state || 'indexed';
+  const data = {domain: dom, generated: new Date().toISOString(), score: P ? P.score : null, level: P ? P.level : null,
+    findings: groups.filter(g => g.items.length).map(g => ({category: g.cat, state: stOf(g), count: g.items.length, urls: g.items.map(i => i.url), remediation: REMEDY[g.cat] || null})),
+    headers: P ? P.headers : null, dns: P ? P.dns : null, cve: cve ? cve.results : null};
+  const a = document.createElement('a');
+  a.href = URL.createObjectURL(new Blob([JSON.stringify(data, null, 2)], {type: 'application/json'}));
+  a.download = 'exposure-audit-' + dom + '.json'; a.click(); setTimeout(() => URL.revokeObjectURL(a.href), 1000);
+}
+window.addEventListener('beforeprint', () => document.querySelectorAll('.rp details').forEach(d => d.open = true));
 
 // renderReport(): bina SATU dashboard daripada semua data audit
 function renderReport(x){
@@ -946,7 +975,8 @@ function renderReport(x){
   const stOf = g => ((P && P.cat[g.cat]) || {}).state || 'indexed';
   const cnt = {live:0, guarded:0, indexed:0, gone:0};
   hits.forEach(g => cnt[stOf(g)]++);
-  let out = '<div class="rp">';
+  window.LAST_REPORT = x;
+  let out = '<div class="rp"><div class="tb"><button type="button" onclick="exportJson()">Download JSON</button><button type="button" onclick="window.print()">Save as PDF</button></div>';
 
   // 1) Kad skor
   if (P) {

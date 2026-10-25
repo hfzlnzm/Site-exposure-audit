@@ -6,6 +6,8 @@ Live tool: https://site-exposure-audit.vercel.app
 
 Site Exposure Audit is a browser-based tool that runs Google dorking against a domain, validates what it finds against the live site, checks DNS/mail/header posture, and matches detected software versions against known CVEs in the NVD. Results are shown as a single dashboard: a risk score, exposure findings grouped by category, and detail cards for headers, DNS, subdomains and CVEs.
 
+> **Authorized use only.** Scan only domains you own or have written permission to test. The tool asks you to confirm this before every scan.
+
 ---
 
 ## What this tool is — and isn't
@@ -114,6 +116,19 @@ vercel.json        Function timeout config
 ```
 
 ---
+
+## Prioritisation, remediation and reports
+
+- CVEs are ordered **CISA KEV first, then EPSS (FIRST.org), then CVSS**, so the vulnerabilities most likely to be exploited surface first. EPSS is optional: if the FIRST.org API is unreachable the lookup still works.
+- Every finding category shows a **How to fix** note with a CWE reference, next to the existing OWASP Top 10 candidates.
+- **Download JSON** exports findings, remediation, headers, DNS and CVEs. **Save as PDF** uses the browser's print dialog (all sections are expanded automatically).
+
+## Tests
+
+```
+node --test tests/*.test.js
+```
+Unit tests cover the CVSS severity bands, metric selection, KEV/EPSS ordering, the private-IP block, the scope check and the file-signature patterns. They run on every push through GitHub Actions (`.github/workflows/ci.yml`).
 
 ## Disclaimer
 
