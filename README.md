@@ -6,8 +6,6 @@ Live tool: https://site-exposure-audit.vercel.app
 
 Site Exposure Audit is a browser-based tool that runs Google dorking against a domain, validates what it finds against the live site, checks DNS/mail/header posture, and matches detected software versions against known CVEs in the NVD. Results are shown as a single dashboard: a risk score, exposure findings grouped by category, and detail cards for headers, DNS, subdomains and CVEs.
 
-> **Authorized use only.** Scan only domains you own or have written permission to test. The tool asks you to confirm this before every scan.
-
 ---
 
 ## What this tool is — and isn't
