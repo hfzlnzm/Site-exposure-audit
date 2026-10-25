@@ -721,7 +721,7 @@ const OWASP_MAP = {
 // ===== KESAN TEKNOLOGI & VERSI =====
 // Hanya padanan corak pada URL/tajuk/snippet dari Serper. Versi hanya diisi jika benar-benar tertera (cth ?ver=6.4.1). Tiada versi = tiada padanan CVE.
 const TECH = [
-  {name:'WordPress', cpe:'wordpress:wordpress', re:/wp-(includes|content|admin|json)/i, ver:/wp-includes\/[^?\s"]*\?ver=(\d+\.\d+(?:\.\d+)?)|WordPress (\d+\.\d+(?:\.\d+)?)/i},
+  {name:'WordPress', cpe:'wordpress:wordpress', re:/wp-(includes|content|admin|json)/i, ver:/wp-includes\/(?:css\/(?:dist\/block-library\/style|classic-themes|dashicons)|js\/(?:wp-emoji-release|wp-embed))[^?\s"]*\?ver=(\d+\.\d+(?:\.\d+)?)|WordPress (\d+\.\d+(?:\.\d+)?)/i},
   {name:'Divi theme', cpe:'elegantthemes:divi', re:/themes\/Divi\b/i, ver:/themes\/Divi\/[^?\s"]*\?ver=(\d+\.\d+(?:\.\d+)?)/i},
   {name:'SimplePie', cpe:'simplepie:simplepie', re:/SimplePie/i, ver:/SimplePie[ \/](\d+\.\d+(?:\.\d+)?)/i},
   {name:'phpMyAdmin', cpe:'phpmyadmin:phpmyadmin', re:/phpmyadmin/i, ver:/phpMyAdmin (\d+\.\d+(?:\.\d+)?)/i},
